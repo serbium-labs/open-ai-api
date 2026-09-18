@@ -1,41 +1,70 @@
 # Open AI API
 
-A simple starting point for building applications that interact with the OpenAI API.
+A small web application that sends prompts to a local Codex agent through the
+Codex SDK.
 
 ## Prerequisites
 
 - Node.js 18 or later
-- An OpenAI API key
+- Codex CLI authenticated with your ChatGPT account
+
+An OpenAI API key is **not required**. The SDK reuses the Codex session stored
+on the machine where the server runs, so the application can work with the
+same ChatGPT account that is already signed in to Codex.
 
 ## Setup
 
-1. Clone the repository and install dependencies:
+1. Sign in to Codex if there is no active local session yet:
 
-	```bash
-	npm install
-	```
+   ```bash
+   codex login
+   ```
 
-2. Create a `.env` file in the project root:
+   You can check the current authentication status with:
 
-	```env
-	OPENAI_API_KEY=your_api_key_here
-	```
+   ```bash
+   codex login status
+   ```
 
-3. Start the application using the project’s configured development command:
+2. Install the project dependencies:
 
-	```bash
-	npm run dev
-	```
+   ```bash
+   npm install
+   ```
+
+3. Start the application:
+
+   ```bash
+   npm start
+   ```
+
+4. Open <http://localhost:3001>.
+
+## Authentication
+
+`server.mjs` creates a Codex SDK client without passing an API key. The Codex
+process therefore picks up the existing local Codex authentication session.
+There is no need to create a `.env` file or set `OPENAI_API_KEY` for this setup.
+
+The session belongs to the operating-system user running the server. If the
+server is started under another user, in a container, or on another machine,
+that environment must have its own Codex login.
+
+Using an API key remains an optional alternative for non-interactive or CI
+environments, but it is not required for local use with an authenticated Codex
+session.
 
 ## Usage
 
-Use the application or API endpoints provided by this project to send requests to OpenAI. Keep your API key private and never commit the `.env` file.
+Enter a prompt in the web interface. The server sends it to a new local Codex
+thread and returns the final response.
 
 ## Environment variables
 
-| Variable | Description |
-| --- | --- |
-| `OPENAI_API_KEY` | API key used to authenticate with OpenAI |
+| Variable | Required | Description |
+| --- | --- | --- |
+| `PORT` | No | HTTP port. Defaults to `3001`. |
+| `OPENAI_API_KEY` | No | Optional API-key authentication instead of the stored Codex session. |
 
 ## License
 
