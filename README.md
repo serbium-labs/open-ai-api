@@ -1,7 +1,12 @@
 # Open AI API
 
-A small web application that sends prompts to a local Codex agent through the
-Codex SDK.
+A small two-part web application that sends prompts to a local Codex agent
+through the Codex SDK.
+
+The project is split into:
+
+- `client/` - React + Vite + TypeScript.
+- `server/` - Express + TypeScript.
 
 ## Prerequisites
 
@@ -26,27 +31,73 @@ same ChatGPT account that is already signed in to Codex.
    codex login status
    ```
 
-2. Install the project dependencies:
+2. Install dependencies for the root workspace, client, and server:
 
    ```bash
    npm install
    ```
 
-3. Start the application:
+3. Start both applications in development mode:
 
    ```bash
    npm start
    ```
 
-4. Open <http://localhost:3001>.
+   or:
+
+   ```bash
+   npm run dev
+   ```
+
+   On macOS/Linux/Git Bash:
+
+   ```bash
+   ./dev.sh
+   ```
+
+   On Windows:
+
+   ```bat
+   dev.bat
+   ```
+
+4. Open <http://localhost:5173>.
 
 The server creates `code-to-edit/` automatically on startup. Place the source
 files you want Codex to modify in that directory, including nested folders if
 needed.
 
+## Development
+
+The client runs on <http://localhost:5173>. The server runs on
+<http://localhost:3001>. Vite proxies `/api/*` requests to the Express server,
+so browser code can call `/api/code` and `/api/codex` without hardcoding the
+server origin.
+
+Run one side at a time if needed:
+
+```bash
+npm run dev:client
+npm run dev:server
+```
+
+Build both projects:
+
+```bash
+npm run build
+```
+
+Run server tests:
+
+```bash
+npm run test
+```
+
+Development conventions are documented in `DEVELOPMENT.md`.
+
 ## Authentication
 
-`server.mjs` creates a Codex SDK client without passing an API key. The Codex
+The server creates a Codex SDK client without passing an API key. The Codex
 process therefore picks up the existing local Codex authentication session.
 There is no need to create a `.env` file or set `OPENAI_API_KEY` for this setup.
 
@@ -72,8 +123,7 @@ control or maintain a backup. Symbolic links and non-UTF-8 files are not shown
 in the browser. The entire `code-to-edit/` directory is ignored by Git in this
 repository.
 
-The server still saves Codex's final textual response and returns it to the
-browser as before.
+The server saves Codex's final textual response and returns it to the browser.
 
 ## Saved responses
 
@@ -98,7 +148,7 @@ retention limit.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `PORT` | No | HTTP port. Defaults to `3001`. |
+| `PORT` | No | Express server port. Defaults to `3001`. |
 | `OPENAI_API_KEY` | No | Optional API-key authentication instead of the stored Codex session. |
 
 ## License
