@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <main>
+        <h1>Codex Browser Test</h1>
+        <form id="codex-form">
+            <label for="prompt">Prompt</label>
+            <textarea id="prompt" name="prompt" rows="6">Write a JavaScript function sum(a, b) that returns the sum of two numbers.</textarea>
+            <button type="submit">Run Codex</button>
+        </form>
+        <pre id="output" aria-live="polite"></pre>
+    </main>
+
+    <script>
+        const form = document.querySelector("#codex-form");
+        const promptInput = document.querySelector("#prompt");
+        const output = document.querySelector("#output");
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            output.textContent = "Running...";
+
+            try {
+                const response = await fetch("/api/codex", {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        prompt: promptInput.value,
+                    }),
+                });
+                const body = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(body.error || "Request failed");
+                }
+
+                output.textContent = body.finalResponse;
+            } catch (error) {
+                output.textContent = error instanceof Error ? error.message : "Unexpected error";
+            }
+        });
+    </script>
+</body>
+
+</html>

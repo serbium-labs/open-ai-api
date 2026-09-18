@@ -1,0 +1,17 @@
+{
+  "name": "codex-api-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@openai/codex-sdk": "^0.155.0",
+    "openai": "^7.18.0"
+  }
+}
