@@ -40,6 +40,10 @@ same ChatGPT account that is already signed in to Codex.
 
 4. Open <http://localhost:3001>.
 
+The server creates `code-to-edit/` automatically on startup. Place the source
+files you want Codex to modify in that directory, including nested folders if
+needed.
+
 ## Authentication
 
 `server.mjs` creates a Codex SDK client without passing an API key. The Codex
@@ -56,8 +60,20 @@ session.
 
 ## Usage
 
-Enter a prompt in the web interface. The server sends it to a new local Codex
-thread, saves the final response, and returns it to the browser.
+Place code in `code-to-edit/`, then enter an editing instruction in the web
+interface. Codex runs with that directory as its writable workspace, inspects
+the relevant files, and applies changes directly on disk. The browser displays
+the current files under **Code to edit** and refreshes them after every
+successful request.
+
+The workspace is live filesystem state, not a transactional copy. A failed
+Codex run can leave partial edits, so keep important source code under version
+control or maintain a backup. Symbolic links and non-UTF-8 files are not shown
+in the browser. The entire `code-to-edit/` directory is ignored by Git in this
+repository.
+
+The server still saves Codex's final textual response and returns it to the
+browser as before.
 
 ## Saved responses
 

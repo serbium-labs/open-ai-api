@@ -1,8 +1,8 @@
 import { createReadStream } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
-import { extname, join } from "node:path";
+import { extname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Codex } from "@openai/codex-sdk";
@@ -10,20 +10,83 @@ import { Codex } from "@openai/codex-sdk";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT || 3001);
 const responseDirectory = join(root, "responses");
+const codeDirectory = join(root, "code-to-edit");
+const editInstruction = [
+  "Work directly on the files in the current workspace.",
+  "Inspect the relevant files and apply the requested edits on disk; do not only describe or print proposed code.",
+].join(" ");
 
 const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
+  [".mjs", "text/javascript; charset=utf-8"],
 ]);
 
-export async function runCodex(prompt) {
-  const codex = new Codex();
+export async function ensureCodeWorkspace(directory = codeDirectory) {
+  await mkdir(directory, { recursive: true });
+  return directory;
+}
+
+export async function readCodeWorkspace(directory = codeDirectory) {
+  await ensureCodeWorkspace(directory);
+  const files = [];
+
+  await collectTextFiles(directory, "", files);
+  files.sort((left, right) => left.path.localeCompare(right.path));
+
+  return files;
+}
+
+async function collectTextFiles(directory, relativeDirectory, files) {
+  const entries = await readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      continue;
+    }
+
+    const relativePath = relativeDirectory
+      ? posix.join(relativeDirectory, entry.name)
+      : entry.name;
+    const absolutePath = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      await collectTextFiles(absolutePath, relativePath, files);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const contents = await readFile(absolutePath);
+
+    try {
+      files.push({
+        path: relativePath,
+        content: new TextDecoder("utf-8", { fatal: true }).decode(contents),
+      });
+    } catch (error) {
+      if (!(error instanceof TypeError)) {
+        throw error;
+      }
+    }
+  }
+}
+
+export async function runCodex(
+  prompt,
+  { CodexClient = Codex, workingDirectory = codeDirectory } = {},
+) {
+  const codex = new CodexClient();
   const thread = codex.startThread({
+    workingDirectory,
+    sandboxMode: "workspace-write",
     skipGitRepoCheck: true,
   });
-  const result = await thread.run(prompt);
+  const result = await thread.run(`${editInstruction}\n\nUser request:\n${prompt}`);
   return result.finalResponse;
 }
 
@@ -48,11 +111,17 @@ export async function saveCodexResponse(
 export function createServer({
   runCodex: runCodexImpl = runCodex,
   saveResponse: saveResponseImpl = saveCodexResponse,
+  readWorkspace: readWorkspaceImpl = readCodeWorkspace,
 } = {}) {
   return createHttpServer(async (request, response) => {
     try {
       if (request.method === "POST" && request.url === "/api/codex") {
         await handleCodexRequest(request, response, runCodexImpl, saveResponseImpl);
+        return;
+      }
+
+      if (request.method === "GET" && request.url === "/api/code") {
+        sendJson(response, 200, { files: await readWorkspaceImpl() });
         return;
       }
 
@@ -132,6 +201,7 @@ function sendJson(response, statusCode, body) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await ensureCodeWorkspace();
   createServer().listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
   });
