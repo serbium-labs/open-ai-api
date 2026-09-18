@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,7 @@ import { Codex } from "@openai/codex-sdk";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const port = Number(process.env.PORT || 3001);
+const responseDirectory = join(root, "responses");
 
 const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -25,11 +27,32 @@ export async function runCodex(prompt) {
   return result.finalResponse;
 }
 
-export function createServer({ runCodex: runCodexImpl = runCodex } = {}) {
+export async function saveCodexResponse(
+  finalResponse,
+  {
+    directory = responseDirectory,
+    now = () => new Date(),
+    createId = randomUUID,
+  } = {},
+) {
+  const timestamp = now().toISOString().replace(/[:.]/g, "-");
+  const fileName = `${timestamp}_${createId()}.md`;
+  const filePath = join(directory, fileName);
+
+  await mkdir(directory, { recursive: true });
+  await writeFile(filePath, finalResponse, { encoding: "utf8", flag: "wx" });
+
+  return filePath;
+}
+
+export function createServer({
+  runCodex: runCodexImpl = runCodex,
+  saveResponse: saveResponseImpl = saveCodexResponse,
+} = {}) {
   return createHttpServer(async (request, response) => {
     try {
       if (request.method === "POST" && request.url === "/api/codex") {
-        await handleCodexRequest(request, response, runCodexImpl);
+        await handleCodexRequest(request, response, runCodexImpl, saveResponseImpl);
         return;
       }
 
@@ -47,7 +70,7 @@ export function createServer({ runCodex: runCodexImpl = runCodex } = {}) {
   });
 }
 
-async function handleCodexRequest(request, response, runCodexImpl) {
+async function handleCodexRequest(request, response, runCodexImpl, saveResponseImpl) {
   const body = await readJsonBody(request);
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 
@@ -57,6 +80,7 @@ async function handleCodexRequest(request, response, runCodexImpl) {
   }
 
   const finalResponse = await runCodexImpl(prompt);
+  await saveResponseImpl(finalResponse);
   sendJson(response, 200, { finalResponse });
 }
 
@@ -112,4 +136,3 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`Server running at http://localhost:${port}`);
   });
 }
-

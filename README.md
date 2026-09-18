@@ -57,7 +57,26 @@ session.
 ## Usage
 
 Enter a prompt in the web interface. The server sends it to a new local Codex
-thread and returns the final response.
+thread, saves the final response, and returns it to the browser.
+
+## Saved responses
+
+Every successful Codex answer is saved as a separate UTF-8 Markdown file in
+the `responses/` directory at the project root. The directory is created
+automatically when the first answer is saved. Filenames start with a UTC
+timestamp and include a UUID, for example:
+
+```text
+responses/2026-09-18T10-11-12-345Z_123e4567-e89b-12d3-a456-426614174000.md
+```
+
+The server writes the file before returning a successful API response. If the
+file cannot be written, the request returns HTTP 500 instead of reporting a
+false success. Failed Codex requests do not create response files.
+
+The `responses/` directory is ignored by Git. Files are retained until they
+are removed manually; the application does not apply automatic cleanup or a
+retention limit.
 
 ## Environment variables
 
