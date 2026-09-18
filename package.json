@@ -4,8 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test"
+    "start": "node server.mjs"
   },
   "keywords": [],
   "author": "",
