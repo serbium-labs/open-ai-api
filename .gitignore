@@ -1,2 +1,7 @@
 .DS_Store
 node_modules
+dist/
+openspec
+.agents
+responses/
+code-to-edit/

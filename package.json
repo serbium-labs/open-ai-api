@@ -2,16 +2,21 @@
   "name": "codex-api-test",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
-    "start": "node server.mjs"
+    "install:all": "npm install",
+    "start": "npm run dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "test": "npm --prefix server run test"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "@openai/codex-sdk": "^0.155.0",
-    "openai": "^7.18.0"
-  }
+  "license": "ISC"
 }
