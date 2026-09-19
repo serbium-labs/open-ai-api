@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from "express";
 
-import { HTTP_STATUS } from "../../constants/index.js";
-import type { CodexService } from "../../services/codex/index.js";
-import type { ResponseStorage } from "../../services/responses/index.js";
-import type { CodexRequestBody, CodexSuccessResponse, ErrorResponse } from "../../types/index.js";
+import { HTTP_STATUS } from "@/constants/index.js";
+import type { CodexService } from "@/services/codex/index.js";
+import type { ResponseStorage } from "@/services/responses/index.js";
+import type { CodexRequestBody, CodexSuccessResponse, ErrorResponse } from "@/types/index.js";
 
 export function createCodexRouter(
   codexService: CodexService,

@@ -1,12 +1,12 @@
 import express, { type Express } from "express";
 
-import { API_ROUTES } from "../constants/index.js";
-import { createServerConfig, type ServerConfig } from "../config/index.js";
-import { createCodeRouter } from "../routes/code/index.js";
-import { createCodexRouter } from "../routes/codex/index.js";
-import { CodexService } from "../services/codex/index.js";
-import { ResponseStorage } from "../services/responses/index.js";
-import { WorkspaceService } from "../services/workspace/index.js";
+import { API_ROUTES } from "@/constants/index.js";
+import { createServerConfig, type ServerConfig } from "@/config/index.js";
+import { createCodeRouter } from "@/routes/code/index.js";
+import { createCodexRouter } from "@/routes/codex/index.js";
+import { CodexService } from "@/services/codex/index.js";
+import { ResponseStorage } from "@/services/responses/index.js";
+import { WorkspaceService } from "@/services/workspace/index.js";
 
 export type AppDependencies = {
   config?: ServerConfig;

@@ -1,4 +1,4 @@
-import type { CodeFile } from "../../types/index.js";
+import type { CodeFile } from "@/types/index.js";
 
 export type CodeFilesResponse = {
   files: CodeFile[];

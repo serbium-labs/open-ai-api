@@ -1,6 +1,6 @@
 import type { FormEvent, ReactElement } from "react";
 
-import { UI_TEXT } from "../../constants/index.js";
+import { UI_TEXT } from "@/constants/index.js";
 
 export type PromptFormProps = {
   prompt: string;

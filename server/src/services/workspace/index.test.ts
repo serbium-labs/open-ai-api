@@ -4,7 +4,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
-import { WorkspaceService } from "./index.js";
+import { WorkspaceService } from "@/services/workspace/index.js";
 
 test("WorkspaceService returns sorted UTF-8 text files and skips binary files", async () => {
   const rootDirectory: string = await mkdtemp(join(tmpdir(), "workspace-service-"));

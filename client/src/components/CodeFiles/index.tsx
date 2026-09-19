@@ -1,5 +1,5 @@
-import { UI_TEXT } from "../../constants/index.js";
-import type { CodeFile } from "../../types/index.js";
+import { UI_TEXT } from "@/constants/index.js";
+import type { CodeFile } from "@/types/index.js";
 import type { ReactElement } from "react";
 
 export type CodeFilesProps = {
