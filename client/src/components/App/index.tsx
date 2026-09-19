@@ -66,25 +66,37 @@ export function App(): ReactElement {
   }
 
   return (
-    <main className="app-shell">
-      <ChatTranscript messages={messages} />
-      <PromptForm
-        prompt={prompt}
-        isRunning={isRunning}
-        onPromptChange={setPrompt}
-        onSubmit={() => {
-          void handleSubmit();
-        }}
-      />
-      <button
-        className="resources-toggle"
-        type="button"
-        aria-expanded={isResourcesOpen}
-        onClick={() => setIsResourcesOpen((isOpen: boolean) => !isOpen)}
-      >
-        {isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
-      </button>
-      {isResourcesOpen ? <CodeFiles files={files} status={codeStatus} /> : null}
-    </main>
+    <>
+      <main className={`app-shell${isResourcesOpen ? " app-shell-with-resources" : ""}`}>
+        <div className="chat-layout">
+          <section className="chat-column" aria-label="Chat">
+            <div className="chat-toolbar">
+              <button
+                className={`resources-toggle${isResourcesOpen ? " resources-toggle-open" : ""}`}
+                type="button"
+                aria-expanded={isResourcesOpen}
+                onClick={() => setIsResourcesOpen((isOpen: boolean) => !isOpen)}
+              >
+                {isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
+              </button>
+            </div>
+            <ChatTranscript messages={messages} />
+            <PromptForm
+              prompt={prompt}
+              isRunning={isRunning}
+              onPromptChange={setPrompt}
+              onSubmit={() => {
+                void handleSubmit();
+              }}
+            />
+          </section>
+        </div>
+      </main>
+      {isResourcesOpen ? (
+        <aside className="resources-sidebar" aria-label="Chat resources">
+          <CodeFiles files={files} status={codeStatus} />
+        </aside>
+      ) : null}
+    </>
   );
 }

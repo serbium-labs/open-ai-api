@@ -19,9 +19,32 @@ textarea {
 }
 
 .app-shell {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1280px, calc(100% - 32px));
   margin: 0 auto;
   padding: 24px 0;
+  transition: padding-right 180ms ease;
+}
+
+.app-shell-with-resources {
+  padding-right: 392px;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.chat-column {
+  display: grid;
+  min-width: 0;
+}
+
+.chat-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 
 h1,
@@ -55,6 +78,13 @@ textarea {
   padding: 12px;
   background: #ffffff;
   color: #172033;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+textarea:focus {
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.14);
+  outline: 0;
 }
 
 button {
@@ -65,6 +95,12 @@ button {
   background: #1f6feb;
   color: #ffffff;
   cursor: pointer;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(23, 32, 51, 0.14);
 }
 
 button:disabled {
@@ -92,6 +128,7 @@ button:disabled {
   display: grid;
   gap: 8px;
   max-width: min(760px, 100%);
+  animation: message-enter 180ms ease both;
 }
 
 .chat-message h2 {
@@ -115,6 +152,12 @@ button:disabled {
   border-radius: 8px;
   padding: 12px;
   background: #ffffff;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.chat-message:hover .message-content {
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.08);
+  transform: translateY(-1px);
 }
 
 .chat-message-user .message-content {
@@ -161,6 +204,13 @@ button:disabled {
   border: 1px solid #d6dce8;
   border-radius: 8px;
   background: #ffffff;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.code-file:hover {
+  border-color: #c5cedd;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.1);
+  transform: translateY(-1px);
 }
 
 .code-file h3 {
@@ -182,22 +232,83 @@ pre {
 }
 
 .resources-toggle {
-  margin-bottom: 16px;
   background: #526070;
 }
 
+.resources-toggle-open {
+  background: #172033;
+}
+
+.resources-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, calc(100vw - 24px));
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid #d9e0eb;
+  padding: 24px 16px;
+  background: #eef2f7;
+  box-shadow: -18px 0 40px rgba(23, 32, 51, 0.12);
+  animation: sidebar-enter 180ms ease both;
+  z-index: 10;
+}
+
 .code-section {
-  margin-bottom: 28px;
+  margin-bottom: 0;
 }
 
 .response-panel {
   min-height: 120px;
 }
 
+@keyframes message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
 @media (max-width: 640px) {
   .app-shell {
-    width: min(100% - 24px, 1120px);
+    width: min(100% - 24px, 1280px);
     padding: 24px 0;
+  }
+
+  .app-shell-with-resources {
+    padding-right: 0;
+  }
+
+  .resources-sidebar {
+    width: min(100vw, 360px);
   }
 
   h1 {
