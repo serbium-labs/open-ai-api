@@ -1,12 +1,8 @@
-import { createServerConfig } from "./config/index.js";
-import { createApp } from "./app/index.js";
-import { WorkspaceService } from "./services/workspace/index.js";
+import { createServerConfig } from "#config";
+import { createApp } from "#app";
 
 const config = createServerConfig();
-const workspaceService = new WorkspaceService(config.workspaceDirectory);
 
-await workspaceService.ensureWorkspace();
-
-createApp({ config, workspaceService }).listen(config.port, () => {
+createApp({ config }).listen(config.port, () => {
   console.log(`Server running at http://localhost:${config.port}`);
 });

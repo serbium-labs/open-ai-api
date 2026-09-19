@@ -1,21 +1,40 @@
 # Open AI API
 
-A small two-part web application that sends prompts to a local Codex agent
-through the Codex SDK.
+A small local web application for talking to a Codex agent from a browser.
+The app shows a GPT-style chat between the user and the model, renders
+Markdown and code blocks in the transcript, and persists chat history on disk.
 
 The project is split into:
 
-- `client/` - React + Vite + TypeScript.
-- `server/` - Express + TypeScript.
+- `client/` - React + Vite + TypeScript frontend
+- `server/` - Express + TypeScript backend
+- `chats/` - local runtime chat archive, ignored by Git
+
+## Overview
+
+This app is designed for local Codex experiments:
+
+- the browser provides a chat-style prompt UI,
+- the server sends the prompt to a local Codex session,
+- Codex returns a final Markdown response,
+- each conversation is saved under `chats/`,
+- fenced code blocks from assistant messages are saved as resources for the
+  same chat,
+- opening a saved chat loads its transcript and resource sidebar.
+
+The resources sidebar is hidden by default and can be opened from the chat UI.
+It shows generated code block files with language labels, syntax highlighting,
+and copy buttons. Code blocks in chat responses have the same rendering and
+copy support.
+
+An OpenAI API key is not required for the default local setup. The SDK reuses
+the existing Codex authentication session on the machine running the server, so
+it works with the same ChatGPT account already signed in to Codex.
 
 ## Prerequisites
 
 - Node.js 18 or later
 - Codex CLI authenticated with your ChatGPT account
-
-An OpenAI API key is **not required**. The SDK reuses the Codex session stored
-on the machine where the server runs, so the application can work with the
-same ChatGPT account that is already signed in to Codex.
 
 ## Setup
 
@@ -25,7 +44,7 @@ same ChatGPT account that is already signed in to Codex.
    codex login
    ```
 
-   You can check the current authentication status with:
+   Check the current status with:
 
    ```bash
    codex login status
@@ -37,7 +56,7 @@ same ChatGPT account that is already signed in to Codex.
    npm install
    ```
 
-3. Start both applications in development mode:
+3. Start the application in development mode:
 
    ```bash
    npm start
@@ -63,16 +82,77 @@ same ChatGPT account that is already signed in to Codex.
 
 4. Open <http://localhost:5173>.
 
-The server creates `code-to-edit/` automatically on startup. Place the source
-files you want Codex to modify in that directory, including nested folders if
-needed.
+## Usage
+
+Enter a prompt in the chat composer and send it with Enter or the send button.
+Shift+Enter inserts a new line. The composer is disabled while a request is
+running, and the pending model message shows a thinking indicator.
+
+The left sidebar lists saved chats. You can switch between chats, start a new
+chat after the current chat has at least one message, and rename existing
+chats. Empty draft chats are not created from the New chat button.
+
+The transcript supports:
+
+- Markdown paragraphs, quotes, lists, headings, links, inline code, and bold
+  text,
+- fenced code blocks rendered inline with language labels,
+- syntax highlighting for common languages such as JavaScript, TypeScript,
+  JSON, CSS, HTML, Markdown, Python, and shell scripts,
+- copy buttons on code blocks.
+
+## Persistent Chat Archive
+
+Chats are stored under `chats/` at the project root and are retained across
+server restarts. The archive is organized by request date:
+
+```text
+chats/
+  2026-09-19/
+    2026-09-19T19-43-29-435Z_b1145277/
+      chat.md
+      messages/
+        001-user.md
+        002-assistant.md
+      resources/
+        src/example.js
+        src/example.js.meta.md
+```
+
+`chat.md` stores chat metadata such as id, title, creation date, and update
+date. Each message is saved as its own Markdown file in `messages/`. Assistant
+messages link to generated resources when a response contains fenced code
+blocks.
+
+Resources are saved in the selected chat's `resources/` folder. Each resource
+keeps the generated code content, while its `.meta.md` sidecar stores the
+language, producing message id, and backlink to the message file.
+
+When Codex returns fenced code blocks, the server extracts each block. If a
+code block includes a safe relative path in the fence info, that path is used.
+For example:
+
+````markdown
+```js src/example.js
+export function example() {
+  return "hello";
+}
+```
+````
+
+If no path is provided, the server generates a filename such as
+`002-assistant__001.js`. Supported language-derived extensions include `js`,
+`jsx`, `ts`, `tsx`, `json`, `css`, `html`, `md`, `py`, and `sh`. Unknown
+languages fall back to `.txt`.
+
+The `chats/` directory is ignored by Git. Older `responses/` and
+`code-block-responses/` folders are no longer used by the active app flow.
 
 ## Development
 
 The client runs on <http://localhost:5173>. The server runs on
 <http://localhost:3001>. Vite proxies `/api/*` requests to the Express server,
-so browser code can call `/api/code` and `/api/codex` without hardcoding the
-server origin.
+so browser code can call `/api/chats` without hardcoding the server origin.
 
 Run one side at a time if needed:
 
@@ -87,7 +167,7 @@ Build both projects:
 npm run build
 ```
 
-Run server tests:
+Run tests:
 
 ```bash
 npm run test
@@ -109,42 +189,7 @@ Using an API key remains an optional alternative for non-interactive or CI
 environments, but it is not required for local use with an authenticated Codex
 session.
 
-## Usage
-
-Place code in `code-to-edit/`, then enter an editing instruction in the web
-interface. Codex runs with that directory as its writable workspace, inspects
-the relevant files, and applies changes directly on disk. The browser displays
-the current files under **Code to edit** and refreshes them after every
-successful request.
-
-The workspace is live filesystem state, not a transactional copy. A failed
-Codex run can leave partial edits, so keep important source code under version
-control or maintain a backup. Symbolic links and non-UTF-8 files are not shown
-in the browser. The entire `code-to-edit/` directory is ignored by Git in this
-repository.
-
-The server saves Codex's final textual response and returns it to the browser.
-
-## Saved responses
-
-Every successful Codex answer is saved as a separate UTF-8 Markdown file in
-the `responses/` directory at the project root. The directory is created
-automatically when the first answer is saved. Filenames start with a UTC
-timestamp and include a UUID, for example:
-
-```text
-responses/2026-09-18T10-11-12-345Z_123e4567-e89b-12d3-a456-426614174000.md
-```
-
-The server writes the file before returning a successful API response. If the
-file cannot be written, the request returns HTTP 500 instead of reporting a
-false success. Failed Codex requests do not create response files.
-
-The `responses/` directory is ignored by Git. Files are retained until they
-are removed manually; the application does not apply automatic cleanup or a
-retention limit.
-
-## Environment variables
+## Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
@@ -153,4 +198,6 @@ retention limit.
 
 ## License
 
-This project is available under the terms of the license included in this repository.
+This project is licensed under the Apache License, Version 2.0.
+
+See the [LICENSE](LICENSE) file for the full text of the license.
