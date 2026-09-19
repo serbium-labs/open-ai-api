@@ -21,7 +21,7 @@ textarea {
 .app-shell {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0;
+  padding: 24px 0;
 }
 
 h1,
@@ -40,7 +40,7 @@ h1 {
 .prompt-form {
   display: grid;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .field-label {
@@ -76,11 +76,12 @@ button:disabled {
 .code-section {
   display: grid;
   gap: 12px;
-  margin-bottom: 28px;
 }
 
 .chat-transcript {
   align-items: start;
+  min-height: 280px;
+  margin-bottom: 16px;
 }
 
 .empty-chat {
@@ -178,6 +179,15 @@ pre {
 
 .message-code pre {
   white-space: pre;
+}
+
+.resources-toggle {
+  margin-bottom: 16px;
+  background: #526070;
+}
+
+.code-section {
+  margin-bottom: 28px;
 }
 
 .response-panel {

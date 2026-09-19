@@ -11,7 +11,7 @@ import {
 } from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
-import { DEFAULT_PROMPT, UI_TEXT } from "@constants";
+import { UI_TEXT } from "@constants";
 import type { CodeFile } from "@models";
 
 function getCodeStatus(files: CodeFile[]): string {
@@ -27,11 +27,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function App(): ReactElement {
-  const [prompt, setPrompt] = useState<string>(DEFAULT_PROMPT);
+  const [prompt, setPrompt] = useState<string>("");
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
 
   async function handleSubmit(): Promise<void> {
     const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, prompt);
@@ -66,7 +67,7 @@ export function App(): ReactElement {
 
   return (
     <main className="app-shell">
-      <h1>{UI_TEXT.title}</h1>
+      <ChatTranscript messages={messages} />
       <PromptForm
         prompt={prompt}
         isRunning={isRunning}
@@ -75,8 +76,15 @@ export function App(): ReactElement {
           void handleSubmit();
         }}
       />
-      <ChatTranscript messages={messages} />
-      <CodeFiles files={files} status={codeStatus} />
+      <button
+        className="resources-toggle"
+        type="button"
+        aria-expanded={isResourcesOpen}
+        onClick={() => setIsResourcesOpen((isOpen: boolean) => !isOpen)}
+      >
+        {isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
+      </button>
+      {isResourcesOpen ? <CodeFiles files={files} status={codeStatus} /> : null}
     </main>
   );
 }

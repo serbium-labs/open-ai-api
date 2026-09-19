@@ -22,13 +22,12 @@ export function PromptForm({
 
   return (
     <form className="prompt-form" onSubmit={handleSubmit}>
-      <label className="field-label" htmlFor="prompt">
-        {UI_TEXT.promptLabel}
-      </label>
       <textarea
         id="prompt"
         name="prompt"
         rows={6}
+        aria-label="Message"
+        placeholder={UI_TEXT.promptPlaceholder}
         value={prompt}
         onChange={(event) => onPromptChange(event.target.value)}
       />
