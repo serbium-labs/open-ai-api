@@ -1,23 +1,31 @@
 # Open AI API
 
-A small web application that lets you send prompts to a local Codex agent
-through the Codex SDK and edit project files from a browser UI.
+A small local web application for talking to a Codex agent from a browser.
+The app shows a chat between the user and the model, renders Markdown and code
+blocks in the transcript, and saves generated output code blocks as files.
 
 The project is split into:
 
-- `client/` — React + Vite + TypeScript frontend
-- `server/` — Express + TypeScript backend
-- `code-to-edit/` — writable workspace used by Codex during editing sessions
-- `responses/` — saved final responses from successful Codex runs
+- `client/` - React + Vite + TypeScript frontend
+- `server/` - Express + TypeScript backend
+- `code-block-responses/` - generated files extracted from model code blocks
+- `responses/` - saved Markdown transcripts of successful Codex runs
 
 ## Overview
 
-This app is designed for local development workflows:
+This app is designed for local Codex experiments:
 
-- the browser shows files in a target workspace,
-- the server sends instructions to the local Codex session,
-- Codex edits files on disk and returns the final text response,
-- the UI refreshes the workspace after each successful request.
+- the browser provides a chat-style prompt UI,
+- the server sends the prompt to a local Codex session,
+- Codex returns a final Markdown response,
+- fenced code blocks from the response are extracted into
+  `code-block-responses/`,
+- the UI refreshes the resources sidebar after each successful request.
+
+The resources sidebar is hidden by default and can be opened from the chat UI.
+It shows the current generated code block files with language labels, syntax
+highlighting, and copy buttons. Code blocks in chat responses have the same
+language labels, syntax highlighting, and copy support.
 
 An OpenAI API key is not required for the default local setup. The SDK reuses
 the existing Codex authentication session on the machine running the server, so
@@ -74,8 +82,77 @@ it works with the same ChatGPT account already signed in to Codex.
 
 4. Open <http://localhost:5173>.
 
-The server creates `code-to-edit/` automatically on startup. Put the files you
-want Codex to modify there, including nested folders if needed.
+The server creates `code-block-responses/` automatically when output code
+blocks are saved.
+
+## Usage
+
+Enter a prompt in the chat composer and send it. The prompt is submitted to
+Codex, then the model response appears in the chat transcript. The composer is
+disabled while a request is running, and the pending model message shows a
+thinking indicator.
+
+The transcript supports:
+
+- Markdown paragraphs, quotes, lists, headings, links, inline code, and bold
+  text,
+- fenced code blocks rendered inline with language labels,
+- syntax highlighting for common languages such as JavaScript, TypeScript,
+  JSON, CSS, HTML, Markdown, Python, and shell scripts,
+- copy buttons on code blocks.
+
+When Codex returns fenced code blocks, the server extracts each block and writes
+it to `code-block-responses/`. If a code block includes a safe relative path in
+the fence info, that path is used. For example:
+
+````markdown
+```js src/example.js
+export function example() {
+  return "hello";
+}
+```
+````
+
+If no path is provided, the server generates a filename such as
+`output-001.js`. Supported language-derived extensions include `js`, `jsx`,
+`ts`, `tsx`, `json`, `css`, `html`, `md`, and `sh`. Unknown languages fall back
+to `.txt`.
+
+The `code-block-responses/` directory is refreshed from the latest successful
+response. It is ignored by Git.
+
+## Resources
+
+Open the resources panel from the chat UI to inspect generated files. Each file
+shows:
+
+- a language label inferred from the filename or detected shell-like `.txt`
+  content,
+- the relative output path,
+- syntax-highlighted content,
+- a copy button for the whole file.
+
+The resources panel is separate from the chat transcript; it is not loaded into
+the prompt automatically.
+
+## Saved responses
+
+Every successful Codex answer is saved as a separate UTF-8 Markdown file in
+the `responses/` directory at the project root. The directory is created
+automatically when the first answer is saved. Filenames start with a UTC
+timestamp and include a UUID, for example:
+
+```text
+responses/2026-09-18T10-11-12-345Z_123e4567-e89b-12d3-a456-426614174000.md
+```
+
+The server writes the response file before returning a successful API response.
+If the file cannot be written, the request returns HTTP 500 instead of
+reporting a false success. Failed Codex requests do not create response files.
+
+The `responses/` directory is ignored by Git. Files are retained until they
+are removed manually; the application does not apply automatic cleanup or a
+retention limit.
 
 ## Development
 
@@ -97,7 +174,7 @@ Build both projects:
 npm run build
 ```
 
-Run server tests:
+Run tests:
 
 ```bash
 npm run test
@@ -119,42 +196,7 @@ Using an API key remains an optional alternative for non-interactive or CI
 environments, but it is not required for local use with an authenticated Codex
 session.
 
-## Usage
-
-Place code in `code-to-edit/`, then enter an editing instruction in the web
-interface. Codex runs with that directory as its writable workspace, inspects
-the relevant files, and applies changes directly on disk. The browser displays
-the current files under **Code to edit** and refreshes them after every
-successful request.
-
-The workspace is live filesystem state, not a transactional copy. A failed
-Codex run can leave partial edits, so keep important source code under version
-control or maintain a backup. Symbolic links and non-UTF-8 files are not shown
-in the browser. The entire `code-to-edit/` directory is ignored by Git in this
-repository.
-
-The server saves Codex's final textual response and returns it to the browser.
-
-## Saved responses
-
-Every successful Codex answer is saved as a separate UTF-8 Markdown file in
-the `responses/` directory at the project root. The directory is created
-automatically when the first answer is saved. Filenames start with a UTC
-timestamp and include a UUID, for example:
-
-```text
-responses/2026-09-18T10-11-12-345Z_123e4567-e89b-12d3-a456-426614174000.md
-```
-
-The server writes the file before returning a successful API response. If the
-file cannot be written, the request returns HTTP 500 instead of reporting a
-false success. Failed Codex requests do not create response files.
-
-The `responses/` directory is ignored by Git. Files are retained until they
-are removed manually; the application does not apply automatic cleanup or a
-retention limit.
-
-## Environment variables
+## Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |

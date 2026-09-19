@@ -1,10 +1,17 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 
-import { fetchCodeFiles, submitAndRefresh } from "@api";
+import { submitAndRefresh } from "@api";
+import {
+  appendPromptTurn,
+  ChatTranscript,
+  completeAssistantMessage,
+  failAssistantMessage,
+  type AppendPromptTurnResult,
+  type ChatMessage,
+} from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
-import { ResponsePanel } from "@components/ResponsePanel";
-import { DEFAULT_PROMPT, UI_TEXT } from "@constants";
+import { UI_TEXT } from "@constants";
 import type { CodeFile } from "@models";
 
 function getCodeStatus(files: CodeFile[]): string {
@@ -20,49 +27,27 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function App(): ReactElement {
-  const [prompt, setPrompt] = useState<string>(DEFAULT_PROMPT);
+  const [prompt, setPrompt] = useState<string>("");
   const [files, setFiles] = useState<CodeFile[]>([]);
-  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.loadingCode);
-  const [responseText, setResponseText] = useState<string>("");
+  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  async function handleSubmit(submittedPrompt: string): Promise<void> {
+    const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, submittedPrompt);
 
-    async function loadCode(): Promise<void> {
-      setCodeStatus(UI_TEXT.loadingCode);
-
-      try {
-        const codeFiles: CodeFile[] = await fetchCodeFiles();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFiles(codeFiles);
-        setCodeStatus(getCodeStatus(codeFiles));
-      } catch (error: unknown) {
-        if (isMounted) {
-          setCodeStatus(`Unable to load code: ${getErrorMessage(error, UI_TEXT.unexpectedError)}`);
-        }
-      }
-    }
-
-    void loadCode();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  async function handleSubmit(): Promise<void> {
+    setMessages(nextTurn.messages);
+    setPrompt("");
     setIsRunning(true);
-    setResponseText(UI_TEXT.running);
+    setCodeStatus(UI_TEXT.loadingCode);
 
     try {
-      await submitAndRefresh(prompt, {
+      await submitAndRefresh(submittedPrompt, {
         onFinalResponse(finalResponse: string): void {
-          setResponseText(finalResponse);
+          setMessages((currentMessages: ChatMessage[]) =>
+            completeAssistantMessage(currentMessages, nextTurn.assistantMessageId, finalResponse),
+          );
         },
         onCodeFiles(codeFiles: CodeFile[]): void {
           setFiles(codeFiles);
@@ -72,29 +57,58 @@ export function App(): ReactElement {
     } catch (error: unknown) {
       const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
 
-      if (responseText === UI_TEXT.running || responseText === "") {
-        setResponseText(message);
-      } else {
-        setCodeStatus(`Unable to refresh code: ${message}`);
-      }
+      setMessages((currentMessages: ChatMessage[]) =>
+        failAssistantMessage(currentMessages, nextTurn.assistantMessageId, message),
+      );
+      setCodeStatus(getCodeStatus(files));
     } finally {
       setIsRunning(false);
     }
   }
 
   return (
-    <main className="app-shell">
-      <h1>{UI_TEXT.title}</h1>
-      <PromptForm
-        prompt={prompt}
-        isRunning={isRunning}
-        onPromptChange={setPrompt}
-        onSubmit={() => {
-          void handleSubmit();
-        }}
-      />
-      <CodeFiles files={files} status={codeStatus} />
-      <ResponsePanel responseText={responseText} />
-    </main>
+    <>
+      <main className={`app-shell${isResourcesOpen ? " app-shell-with-resources" : ""}`}>
+        <div className="chat-layout">
+          <section
+            className={`chat-column${messages.length === 0 ? " chat-column-empty" : " chat-column-active"}`}
+            aria-label="Chat"
+          >
+            <ChatTranscript messages={messages} />
+            <PromptForm
+              prompt={prompt}
+              isRunning={isRunning}
+              onPromptChange={setPrompt}
+              onSubmit={(submittedPrompt: string) => {
+                void handleSubmit(submittedPrompt);
+              }}
+            />
+          </section>
+        </div>
+      </main>
+      <button
+        className={`resources-toggle${isResourcesOpen ? " resources-toggle-open" : ""}`}
+        type="button"
+        aria-label={isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
+        aria-expanded={isResourcesOpen}
+        data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
+        onClick={() => setIsResourcesOpen((isOpen: boolean) => !isOpen)}
+      >
+        {isResourcesOpen ? (
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />
+          </svg>
+        ) : (
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13ZM6.5 5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H10V5H6.5ZM12 5v14h5.5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5H12Z" />
+          </svg>
+        )}
+      </button>
+      {isResourcesOpen ? (
+        <aside className="resources-sidebar" aria-label="Chat resources">
+          <CodeFiles files={files} status={codeStatus} />
+        </aside>
+      ) : null}
+    </>
   );
 }

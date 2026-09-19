@@ -4,4 +4,4 @@ dist/
 openspec
 .agents
 responses/
-code-to-edit/
+code-block-responses/

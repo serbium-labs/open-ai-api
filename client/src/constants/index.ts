@@ -1,13 +1,14 @@
-export const DEFAULT_PROMPT: string =
-  "Write a JavaScript function sum(a, b) that returns the sum of two numbers.";
-
 export const UI_TEXT = {
-  title: "Codex Browser Test",
-  promptLabel: "Prompt",
-  codeTitle: "Code to edit",
-  loadingCode: "Loading code...",
-  emptyCode: "No files in code-to-edit yet.",
+  promptPlaceholder: "Ask the model to write or change code...",
+  codeTitle: "Code block responses",
+  resourcesButton: "Resources",
+  hideResourcesButton: "Hide resources",
+  resourcesTooltip: "Open resources panel",
+  hideResourcesTooltip: "Close resources panel",
+  loadingCode: "Loading generated code...",
+  emptyCode: "No generated code blocks yet.",
   runButton: "Run Codex",
+  emptyPromptTooltip: "Enter a message",
   running: "Running...",
   unexpectedError: "Unexpected error",
 } as const;
