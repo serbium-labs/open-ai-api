@@ -15,9 +15,14 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@components/*": ["./src/components/*"],
+      "@api": ["./src/api/index.ts"],
+      "@api/*": ["./src/api/*"],
+      "@constants": ["./src/constants/index.ts"],
+      "@constants/*": ["./src/constants/*"],
+      "@models": ["./src/types/index.ts"],
+      "@models/*": ["./src/types/*"]
     }
   },
   "include": ["src"]

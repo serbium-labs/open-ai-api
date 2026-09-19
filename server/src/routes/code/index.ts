@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 
-import { HTTP_STATUS } from "@/constants/index.js";
-import type { WorkspaceService } from "@/services/workspace/index.js";
-import type { CodeFilesResponse, ErrorResponse } from "@/types/index.js";
+import { HTTP_STATUS } from "#constants";
+import type { WorkspaceService } from "#services/workspace";
+import type { CodeFilesResponse, ErrorResponse } from "#models";
 
 export function createCodeRouter(workspaceService: WorkspaceService): Router {
   const router: Router = Router();

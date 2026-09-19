@@ -1,6 +1,6 @@
 import { Codex, type RunResult, type SandboxMode, type ThreadOptions } from "@openai/codex-sdk";
 
-import { CODEX_SANDBOX_MODE } from "@/constants/index.js";
+import { CODEX_SANDBOX_MODE } from "#constants";
 
 export type CodexThread = {
   run(prompt: string): Promise<RunResult>;

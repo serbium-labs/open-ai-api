@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import { App } from "@/App/index.js";
-import "@/styles.css";
+import { App } from "@components/App";
+import "./styles.css";
 
 const rootElement: HTMLElement | null = document.querySelector("#root");
 

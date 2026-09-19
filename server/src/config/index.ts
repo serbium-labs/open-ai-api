@@ -5,7 +5,7 @@ import {
   DEFAULT_SERVER_PORT,
   RESPONSES_DIRECTORY_NAME,
   WORKSPACE_DIRECTORY_NAME,
-} from "@/constants/index.js";
+} from "#constants";
 
 export type ServerConfig = {
   port: number;

@@ -1,5 +1,5 @@
-import type { CodexSuccessResponse, CodeFilesResponse, ErrorResponse } from "@/api/types/index.js";
-import type { CodeFile } from "@/types/index.js";
+import type { CodexSuccessResponse, CodeFilesResponse, ErrorResponse } from "@api/types";
+import type { CodeFile } from "@models";
 
 async function readJsonResponse<TSuccess extends object>(response: Response): Promise<TSuccess> {
   const body: TSuccess | ErrorResponse = (await response.json()) as TSuccess | ErrorResponse;

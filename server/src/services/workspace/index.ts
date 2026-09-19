@@ -2,8 +2,8 @@ import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { TextDecoder } from "node:util";
 
-import { UTF8_ENCODING } from "@/constants/index.js";
-import type { CodeFile } from "@/types/index.js";
+import { UTF8_ENCODING } from "#constants";
+import type { CodeFile } from "#models";
 
 export class WorkspaceService {
   public constructor(private readonly directory: string) {}

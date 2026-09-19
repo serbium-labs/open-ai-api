@@ -1,6 +1,6 @@
-import { createServerConfig } from "@/config/index.js";
-import { createApp } from "@/app/index.js";
-import { WorkspaceService } from "@/services/workspace/index.js";
+import { createServerConfig } from "#config";
+import { createApp } from "#app";
+import { WorkspaceService } from "#services/workspace";
 
 const config = createServerConfig();
 const workspaceService = new WorkspaceService(config.workspaceDirectory);
