@@ -1,10 +1,15 @@
-import type { CodeFile } from "@models";
+import type { ChatDetail, ChatSummary } from "@models";
 
-export type CodeFilesResponse = {
-  files: CodeFile[];
+export type ChatListResponse = {
+  chats: ChatSummary[];
 };
 
-export type CodexSuccessResponse = {
+export type ChatDetailResponse = {
+  chat: ChatDetail;
+};
+
+export type ChatPromptResponse = {
+  chat: ChatDetail;
   finalResponse: string;
 };
 

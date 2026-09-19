@@ -1,7 +1,7 @@
 import { UI_TEXT } from "@constants";
 import { CopyButton } from "@components/CopyButton";
 import { HighlightedCode } from "@components/HighlightedCode";
-import type { CodeFile } from "@models";
+import type { ChatResource, CodeFile } from "@models";
 import type { ReactElement } from "react";
 
 export type CodeFilesProps = {
@@ -47,16 +47,17 @@ export function CodeFiles({ files, status }: CodeFilesProps): ReactElement {
   return (
     <section
       className="code-section"
-      aria-label="Generated code block responses"
-      aria-labelledby="code-block-responses-title"
+      aria-label="Resources"
+      aria-labelledby="resources-title"
     >
-      <h2 id="code-block-responses-title">{UI_TEXT.codeTitle}</h2>
+      <h2 id="resources-title">{UI_TEXT.codeTitle}</h2>
       <p className="status" role="status">
         {status}
       </p>
       <div className="code-files">
         {files.map((file: CodeFile) => {
-          const languageLabel: string | undefined = getLanguageLabel(file.path, file.content);
+          const resourceLanguage: string | undefined = "language" in file ? (file as ChatResource).language : undefined;
+          const languageLabel: string | undefined = resourceLanguage ?? getLanguageLabel(file.path, file.content);
 
           return (
             <article className="code-file" key={file.path}>

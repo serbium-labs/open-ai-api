@@ -2,36 +2,26 @@ import express, { type Express } from "express";
 
 import { API_ROUTES } from "#constants";
 import { createServerConfig, type ServerConfig } from "#config";
-import { createCodeRouter } from "#routes/code";
-import { createCodexRouter } from "#routes/codex";
+import { createChatsRouter } from "#routes/chats";
+import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
-import { OutputCodeService } from "#services/output-code";
-import { ResponseStorage } from "#services/responses";
-import { WorkspaceService } from "#services/workspace";
 
 export type AppDependencies = {
   config?: ServerConfig;
-  workspaceService?: WorkspaceService;
   codexService?: CodexService;
-  responseStorage?: ResponseStorage;
-  outputCodeService?: OutputCodeService;
+  chatArchiveService?: ChatArchiveService;
 };
 
 export function createApp(dependencies: AppDependencies = {}): Express {
   const config: ServerConfig = dependencies.config ?? createServerConfig();
-  const workspaceService: WorkspaceService =
-    dependencies.workspaceService ?? new WorkspaceService(config.workspaceDirectory);
   const codexService: CodexService =
-    dependencies.codexService ?? new CodexService({ workingDirectory: config.workspaceDirectory });
-  const responseStorage: ResponseStorage =
-    dependencies.responseStorage ?? new ResponseStorage({ directory: config.responsesDirectory });
-  const outputCodeService: OutputCodeService =
-    dependencies.outputCodeService ?? new OutputCodeService(config.workspaceDirectory);
+    dependencies.codexService ?? new CodexService({ workingDirectory: config.repositoryRoot });
+  const chatArchiveService: ChatArchiveService =
+    dependencies.chatArchiveService ?? new ChatArchiveService(config.chatArchiveDirectory);
   const app: Express = express();
 
   app.use(express.json());
-  app.use(API_ROUTES.code, createCodeRouter(workspaceService));
-  app.use(API_ROUTES.codex, createCodexRouter(codexService, responseStorage, outputCodeService));
+  app.use(API_ROUTES.chats, createChatsRouter(codexService, chatArchiveService));
 
   return app;
 }

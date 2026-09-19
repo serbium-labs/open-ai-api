@@ -1,7 +1,8 @@
 .DS_Store
 node_modules
 dist/
+build/
+out/
 openspec
 .agents
-responses/
-code-block-responses/
+/chats/

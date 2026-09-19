@@ -1,15 +1,14 @@
 # Open AI API
 
 A small local web application for talking to a Codex agent from a browser.
-The app shows a chat between the user and the model, renders Markdown and code
-blocks in the transcript, and saves generated output code blocks as files.
+The app shows a GPT-style chat between the user and the model, renders
+Markdown and code blocks in the transcript, and persists chat history on disk.
 
 The project is split into:
 
 - `client/` - React + Vite + TypeScript frontend
 - `server/` - Express + TypeScript backend
-- `code-block-responses/` - generated files extracted from model code blocks
-- `responses/` - saved Markdown transcripts of successful Codex runs
+- `chats/` - local runtime chat archive, ignored by Git
 
 ## Overview
 
@@ -18,14 +17,15 @@ This app is designed for local Codex experiments:
 - the browser provides a chat-style prompt UI,
 - the server sends the prompt to a local Codex session,
 - Codex returns a final Markdown response,
-- fenced code blocks from the response are extracted into
-  `code-block-responses/`,
-- the UI refreshes the resources sidebar after each successful request.
+- each conversation is saved under `chats/`,
+- fenced code blocks from assistant messages are saved as resources for the
+  same chat,
+- opening a saved chat loads its transcript and resource sidebar.
 
 The resources sidebar is hidden by default and can be opened from the chat UI.
-It shows the current generated code block files with language labels, syntax
-highlighting, and copy buttons. Code blocks in chat responses have the same
-language labels, syntax highlighting, and copy support.
+It shows generated code block files with language labels, syntax highlighting,
+and copy buttons. Code blocks in chat responses have the same rendering and
+copy support.
 
 An OpenAI API key is not required for the default local setup. The SDK reuses
 the existing Codex authentication session on the machine running the server, so
@@ -82,15 +82,15 @@ it works with the same ChatGPT account already signed in to Codex.
 
 4. Open <http://localhost:5173>.
 
-The server creates `code-block-responses/` automatically when output code
-blocks are saved.
-
 ## Usage
 
-Enter a prompt in the chat composer and send it. The prompt is submitted to
-Codex, then the model response appears in the chat transcript. The composer is
-disabled while a request is running, and the pending model message shows a
-thinking indicator.
+Enter a prompt in the chat composer and send it with Enter or the send button.
+Shift+Enter inserts a new line. The composer is disabled while a request is
+running, and the pending model message shows a thinking indicator.
+
+The left sidebar lists saved chats. You can switch between chats, start a new
+chat after the current chat has at least one message, and rename existing
+chats. Empty draft chats are not created from the New chat button.
 
 The transcript supports:
 
@@ -101,9 +101,36 @@ The transcript supports:
   JSON, CSS, HTML, Markdown, Python, and shell scripts,
 - copy buttons on code blocks.
 
-When Codex returns fenced code blocks, the server extracts each block and writes
-it to `code-block-responses/`. If a code block includes a safe relative path in
-the fence info, that path is used. For example:
+## Persistent Chat Archive
+
+Chats are stored under `chats/` at the project root and are retained across
+server restarts. The archive is organized by request date:
+
+```text
+chats/
+  2026-09-19/
+    2026-09-19T19-43-29-435Z_b1145277/
+      chat.md
+      messages/
+        001-user.md
+        002-assistant.md
+      resources/
+        src/example.js
+        src/example.js.meta.md
+```
+
+`chat.md` stores chat metadata such as id, title, creation date, and update
+date. Each message is saved as its own Markdown file in `messages/`. Assistant
+messages link to generated resources when a response contains fenced code
+blocks.
+
+Resources are saved in the selected chat's `resources/` folder. Each resource
+keeps the generated code content, while its `.meta.md` sidecar stores the
+language, producing message id, and backlink to the message file.
+
+When Codex returns fenced code blocks, the server extracts each block. If a
+code block includes a safe relative path in the fence info, that path is used.
+For example:
 
 ````markdown
 ```js src/example.js
@@ -114,52 +141,18 @@ export function example() {
 ````
 
 If no path is provided, the server generates a filename such as
-`output-001.js`. Supported language-derived extensions include `js`, `jsx`,
-`ts`, `tsx`, `json`, `css`, `html`, `md`, and `sh`. Unknown languages fall back
-to `.txt`.
+`002-assistant__001.js`. Supported language-derived extensions include `js`,
+`jsx`, `ts`, `tsx`, `json`, `css`, `html`, `md`, `py`, and `sh`. Unknown
+languages fall back to `.txt`.
 
-The `code-block-responses/` directory is refreshed from the latest successful
-response. It is ignored by Git.
-
-## Resources
-
-Open the resources panel from the chat UI to inspect generated files. Each file
-shows:
-
-- a language label inferred from the filename or detected shell-like `.txt`
-  content,
-- the relative output path,
-- syntax-highlighted content,
-- a copy button for the whole file.
-
-The resources panel is separate from the chat transcript; it is not loaded into
-the prompt automatically.
-
-## Saved responses
-
-Every successful Codex answer is saved as a separate UTF-8 Markdown file in
-the `responses/` directory at the project root. The directory is created
-automatically when the first answer is saved. Filenames start with a UTC
-timestamp and include a UUID, for example:
-
-```text
-responses/2026-09-18T10-11-12-345Z_123e4567-e89b-12d3-a456-426614174000.md
-```
-
-The server writes the response file before returning a successful API response.
-If the file cannot be written, the request returns HTTP 500 instead of
-reporting a false success. Failed Codex requests do not create response files.
-
-The `responses/` directory is ignored by Git. Files are retained until they
-are removed manually; the application does not apply automatic cleanup or a
-retention limit.
+The `chats/` directory is ignored by Git. Older `responses/` and
+`code-block-responses/` folders are no longer used by the active app flow.
 
 ## Development
 
 The client runs on <http://localhost:5173>. The server runs on
 <http://localhost:3001>. Vite proxies `/api/*` requests to the Express server,
-so browser code can call `/api/code` and `/api/codex` without hardcoding the
-server origin.
+so browser code can call `/api/chats` without hardcoding the server origin.
 
 Run one side at a time if needed:
 
