@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-import { fetchCodeFiles, submitAndRefresh } from "../api/index.js";
-import { CodeFiles } from "../components/CodeFiles/index.js";
-import { PromptForm } from "../components/PromptForm/index.js";
-import { ResponsePanel } from "../components/ResponsePanel/index.js";
-import { DEFAULT_PROMPT, UI_TEXT } from "../constants/index.js";
-import type { CodeFile } from "../types/index.js";
+import { fetchCodeFiles, submitAndRefresh } from "@api";
+import { CodeFiles } from "@components/CodeFiles";
+import { PromptForm } from "@components/PromptForm";
+import { ResponsePanel } from "@components/ResponsePanel";
+import { DEFAULT_PROMPT, UI_TEXT } from "@constants";
+import type { CodeFile } from "@models";
 
 function getCodeStatus(files: CodeFile[]): string {
   if (files.length === 0) {
