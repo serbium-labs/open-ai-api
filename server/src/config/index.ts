@@ -2,16 +2,14 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  CHAT_ARCHIVE_DIRECTORY_NAME,
   DEFAULT_SERVER_PORT,
-  RESPONSES_DIRECTORY_NAME,
-  WORKSPACE_DIRECTORY_NAME,
 } from "#constants";
 
 export type ServerConfig = {
   port: number;
   repositoryRoot: string;
-  workspaceDirectory: string;
-  responsesDirectory: string;
+  chatArchiveDirectory: string;
 };
 
 function readPort(value: string | undefined): number {
@@ -34,7 +32,6 @@ export function createServerConfig(environment: NodeJS.ProcessEnv = process.env)
   return {
     port: readPort(environment.PORT),
     repositoryRoot,
-    workspaceDirectory: join(repositoryRoot, WORKSPACE_DIRECTORY_NAME),
-    responsesDirectory: join(repositoryRoot, RESPONSES_DIRECTORY_NAME),
+    chatArchiveDirectory: join(repositoryRoot, CHAT_ARCHIVE_DIRECTORY_NAME),
   };
 }
