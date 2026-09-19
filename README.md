@@ -1,21 +1,32 @@
 # Open AI API
 
-A small two-part web application that sends prompts to a local Codex agent
-through the Codex SDK.
+A small web application that lets you send prompts to a local Codex agent
+through the Codex SDK and edit project files from a browser UI.
 
 The project is split into:
 
-- `client/` - React + Vite + TypeScript.
-- `server/` - Express + TypeScript.
+- `client/` — React + Vite + TypeScript frontend
+- `server/` — Express + TypeScript backend
+- `code-to-edit/` — writable workspace used by Codex during editing sessions
+- `responses/` — saved final responses from successful Codex runs
+
+## Overview
+
+This app is designed for local development workflows:
+
+- the browser shows files in a target workspace,
+- the server sends instructions to the local Codex session,
+- Codex edits files on disk and returns the final text response,
+- the UI refreshes the workspace after each successful request.
+
+An OpenAI API key is not required for the default local setup. The SDK reuses
+the existing Codex authentication session on the machine running the server, so
+it works with the same ChatGPT account already signed in to Codex.
 
 ## Prerequisites
 
 - Node.js 18 or later
 - Codex CLI authenticated with your ChatGPT account
-
-An OpenAI API key is **not required**. The SDK reuses the Codex session stored
-on the machine where the server runs, so the application can work with the
-same ChatGPT account that is already signed in to Codex.
 
 ## Setup
 
@@ -25,7 +36,7 @@ same ChatGPT account that is already signed in to Codex.
    codex login
    ```
 
-   You can check the current authentication status with:
+   Check the current status with:
 
    ```bash
    codex login status
@@ -37,7 +48,7 @@ same ChatGPT account that is already signed in to Codex.
    npm install
    ```
 
-3. Start both applications in development mode:
+3. Start the application in development mode:
 
    ```bash
    npm start
@@ -63,9 +74,8 @@ same ChatGPT account that is already signed in to Codex.
 
 4. Open <http://localhost:5173>.
 
-The server creates `code-to-edit/` automatically on startup. Place the source
-files you want Codex to modify in that directory, including nested folders if
-needed.
+The server creates `code-to-edit/` automatically on startup. Put the files you
+want Codex to modify there, including nested folders if needed.
 
 ## Development
 
@@ -153,4 +163,6 @@ retention limit.
 
 ## License
 
-This project is available under the terms of the license included in this repository.
+This project is licensed under the Apache License, Version 2.0.
+
+See the [LICENSE](LICENSE) file for the full text of the license.
