@@ -12,9 +12,12 @@ export type OutputCodeChunk = {
 
 const FENCE_PATTERN: RegExp = /```([^\r\n`]*)\r?\n([\s\S]*?)\r?\n```/g;
 const LANGUAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
+  ["bash", "sh"],
   ["javascript", "js"],
   ["js", "js"],
   ["jsx", "jsx"],
+  ["shell", "sh"],
+  ["sh", "sh"],
   ["typescript", "ts"],
   ["ts", "ts"],
   ["tsx", "tsx"],

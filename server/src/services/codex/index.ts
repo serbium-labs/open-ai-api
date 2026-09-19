@@ -24,6 +24,7 @@ export type CodexServiceDependencies = {
 const EDIT_INSTRUCTION_LINES: readonly string[] = [
   "Return output code chunks as fenced code blocks.",
   "When a code block represents a file, include a safe relative path in the fence info such as ```js src/example.js.",
+  "For Markdown files, use a fenced code block with md or markdown and a .md path such as ```md docs/example.md.",
   "Do not rely on pre-existing code-block-responses files and do not apply edits on disk.",
 ];
 
