@@ -16,7 +16,14 @@
     "build": "npm --prefix server run build && npm --prefix client run build",
     "test": "npm --prefix server run test"
   },
-  "keywords": [],
+  "keywords": [
+    "codex",
+    "openai",
+    "chatgpt",
+    "agent",
+    "workspace",
+    "typescript"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "Apache-2.0"
 }
