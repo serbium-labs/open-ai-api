@@ -19,7 +19,7 @@ textarea {
 }
 
 .app-shell {
-  width: min(1040px, calc(100% - 32px));
+  width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
   padding: 32px 0;
 }
@@ -40,7 +40,7 @@ h1 {
 .prompt-form {
   display: grid;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .field-label {
@@ -72,10 +72,78 @@ button:disabled {
   opacity: 0.7;
 }
 
+.chat-transcript,
 .code-section {
   display: grid;
   gap: 12px;
   margin-bottom: 28px;
+}
+
+.chat-transcript {
+  align-items: start;
+}
+
+.empty-chat {
+  color: #526070;
+}
+
+.chat-message {
+  display: grid;
+  gap: 8px;
+  max-width: min(760px, 100%);
+}
+
+.chat-message h2 {
+  font-size: 13px;
+  line-height: 1.2;
+  color: #526070;
+}
+
+.chat-message-user {
+  justify-self: end;
+}
+
+.chat-message-assistant {
+  justify-self: start;
+}
+
+.message-content {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d6dce8;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.chat-message-user .message-content {
+  border-color: #bad3ff;
+  background: #eef5ff;
+}
+
+.chat-message-error .message-content {
+  border-color: #f0b8b8;
+  background: #fff4f4;
+}
+
+.message-content p {
+  white-space: pre-wrap;
+}
+
+.message-code {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #e3e7ef;
+  border-radius: 6px;
+  background: #111827;
+  color: #f8fafc;
+}
+
+.message-code figcaption {
+  border-bottom: 1px solid #2d3748;
+  padding: 8px 10px;
+  color: #cbd5e1;
+  font-size: 13px;
 }
 
 .status {
@@ -108,6 +176,25 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.message-code pre {
+  white-space: pre;
+}
+
 .response-panel {
   min-height: 120px;
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    width: min(100% - 24px, 1120px);
+    padding: 24px 0;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  .chat-message {
+    max-width: 100%;
+  }
 }

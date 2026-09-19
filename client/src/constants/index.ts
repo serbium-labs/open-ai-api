@@ -4,9 +4,9 @@ export const DEFAULT_PROMPT: string =
 export const UI_TEXT = {
   title: "Codex Browser Test",
   promptLabel: "Prompt",
-  codeTitle: "Code to edit",
-  loadingCode: "Loading code...",
-  emptyCode: "No files in code-to-edit yet.",
+  codeTitle: "Code block responses",
+  loadingCode: "Loading generated code...",
+  emptyCode: "No generated code blocks yet.",
   runButton: "Run Codex",
   running: "Running...",
   unexpectedError: "Unexpected error",

@@ -1,9 +1,16 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 
-import { fetchCodeFiles, submitAndRefresh } from "@api";
+import { submitAndRefresh } from "@api";
+import {
+  appendPromptTurn,
+  ChatTranscript,
+  completeAssistantMessage,
+  failAssistantMessage,
+  type AppendPromptTurnResult,
+  type ChatMessage,
+} from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
-import { ResponsePanel } from "@components/ResponsePanel";
 import { DEFAULT_PROMPT, UI_TEXT } from "@constants";
 import type { CodeFile } from "@models";
 
@@ -22,47 +29,23 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export function App(): ReactElement {
   const [prompt, setPrompt] = useState<string>(DEFAULT_PROMPT);
   const [files, setFiles] = useState<CodeFile[]>([]);
-  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.loadingCode);
-  const [responseText, setResponseText] = useState<string>("");
+  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadCode(): Promise<void> {
-      setCodeStatus(UI_TEXT.loadingCode);
-
-      try {
-        const codeFiles: CodeFile[] = await fetchCodeFiles();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFiles(codeFiles);
-        setCodeStatus(getCodeStatus(codeFiles));
-      } catch (error: unknown) {
-        if (isMounted) {
-          setCodeStatus(`Unable to load code: ${getErrorMessage(error, UI_TEXT.unexpectedError)}`);
-        }
-      }
-    }
-
-    void loadCode();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   async function handleSubmit(): Promise<void> {
+    const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, prompt);
+
+    setMessages(nextTurn.messages);
     setIsRunning(true);
-    setResponseText(UI_TEXT.running);
+    setCodeStatus(UI_TEXT.loadingCode);
 
     try {
       await submitAndRefresh(prompt, {
         onFinalResponse(finalResponse: string): void {
-          setResponseText(finalResponse);
+          setMessages((currentMessages: ChatMessage[]) =>
+            completeAssistantMessage(currentMessages, nextTurn.assistantMessageId, finalResponse),
+          );
         },
         onCodeFiles(codeFiles: CodeFile[]): void {
           setFiles(codeFiles);
@@ -72,11 +55,10 @@ export function App(): ReactElement {
     } catch (error: unknown) {
       const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
 
-      if (responseText === UI_TEXT.running || responseText === "") {
-        setResponseText(message);
-      } else {
-        setCodeStatus(`Unable to refresh code: ${message}`);
-      }
+      setMessages((currentMessages: ChatMessage[]) =>
+        failAssistantMessage(currentMessages, nextTurn.assistantMessageId, message),
+      );
+      setCodeStatus(`Unable to refresh code: ${message}`);
     } finally {
       setIsRunning(false);
     }
@@ -93,8 +75,8 @@ export function App(): ReactElement {
           void handleSubmit();
         }}
       />
+      <ChatTranscript messages={messages} />
       <CodeFiles files={files} status={codeStatus} />
-      <ResponsePanel responseText={responseText} />
     </main>
   );
 }

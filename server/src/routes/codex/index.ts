@@ -2,12 +2,14 @@ import { Router, type Request, type Response } from "express";
 
 import { HTTP_STATUS } from "#constants";
 import type { CodexService } from "#services/codex";
+import type { OutputCodeService } from "#services/output-code";
 import type { ResponseStorage } from "#services/responses";
 import type { CodexRequestBody, CodexSuccessResponse, ErrorResponse } from "#models";
 
 export function createCodexRouter(
   codexService: CodexService,
   responseStorage: ResponseStorage,
+  outputCodeService: OutputCodeService,
 ): Router {
   const router: Router = Router();
 
@@ -27,6 +29,7 @@ export function createCodexRouter(
 
         const finalResponse: string = await codexService.run(prompt);
         await responseStorage.save(finalResponse);
+        await outputCodeService.saveResponseChunks(finalResponse);
         response.status(HTTP_STATUS.ok).json({ finalResponse });
       } catch (error: unknown) {
         response.status(HTTP_STATUS.internalServerError).json({

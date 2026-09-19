@@ -9,8 +9,12 @@ export type CodeFilesProps = {
 
 export function CodeFiles({ files, status }: CodeFilesProps): ReactElement {
   return (
-    <section className="code-section" aria-labelledby="code-to-edit-title">
-      <h2 id="code-to-edit-title">{UI_TEXT.codeTitle}</h2>
+    <section
+      className="code-section"
+      aria-label="Generated code block responses"
+      aria-labelledby="code-block-responses-title"
+    >
+      <h2 id="code-block-responses-title">{UI_TEXT.codeTitle}</h2>
       <p className="status" role="status">
         {status}
       </p>

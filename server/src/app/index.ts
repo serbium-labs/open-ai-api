@@ -5,6 +5,7 @@ import { createServerConfig, type ServerConfig } from "#config";
 import { createCodeRouter } from "#routes/code";
 import { createCodexRouter } from "#routes/codex";
 import { CodexService } from "#services/codex";
+import { OutputCodeService } from "#services/output-code";
 import { ResponseStorage } from "#services/responses";
 import { WorkspaceService } from "#services/workspace";
 
@@ -13,6 +14,7 @@ export type AppDependencies = {
   workspaceService?: WorkspaceService;
   codexService?: CodexService;
   responseStorage?: ResponseStorage;
+  outputCodeService?: OutputCodeService;
 };
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -23,11 +25,13 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     dependencies.codexService ?? new CodexService({ workingDirectory: config.workspaceDirectory });
   const responseStorage: ResponseStorage =
     dependencies.responseStorage ?? new ResponseStorage({ directory: config.responsesDirectory });
+  const outputCodeService: OutputCodeService =
+    dependencies.outputCodeService ?? new OutputCodeService(config.workspaceDirectory);
   const app: Express = express();
 
   app.use(express.json());
   app.use(API_ROUTES.code, createCodeRouter(workspaceService));
-  app.use(API_ROUTES.codex, createCodexRouter(codexService, responseStorage));
+  app.use(API_ROUTES.codex, createCodexRouter(codexService, responseStorage, outputCodeService));
 
   return app;
 }

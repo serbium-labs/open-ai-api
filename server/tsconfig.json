@@ -9,14 +9,13 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src",
-    "baseUrl": ".",
     "paths": {
-      "#app": ["src/app/index.ts"],
-      "#config": ["src/config/index.ts"],
-      "#constants": ["src/constants/index.ts"],
-      "#routes/*": ["src/routes/*/index.ts"],
-      "#services/*": ["src/services/*/index.ts"],
-      "#models": ["src/types/index.ts"]
+      "#app": ["./src/app/index.ts"],
+      "#config": ["./src/config/index.ts"],
+      "#constants": ["./src/constants/index.ts"],
+      "#routes/*": ["./src/routes/*/index.ts"],
+      "#services/*": ["./src/services/*/index.ts"],
+      "#models": ["./src/types/index.ts"]
     },
     "types": ["node"]
   },
