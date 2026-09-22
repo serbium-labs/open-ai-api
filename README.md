@@ -68,18 +68,6 @@ it works with the same ChatGPT account already signed in to Codex.
    npm run dev
    ```
 
-   On macOS/Linux/Git Bash:
-
-   ```bash
-   ./dev.sh
-   ```
-
-   On Windows:
-
-   ```bat
-   dev.bat
-   ```
-
 4. Open <http://localhost:5173>.
 
 ## Usage
@@ -159,6 +147,13 @@ Run one side at a time if needed:
 ```bash
 npm run dev:client
 npm run dev:server
+```
+
+Stop development servers started through `npm run dev` or `npm start` from
+another terminal:
+
+```bash
+npm run stop
 ```
 
 Build both projects:
