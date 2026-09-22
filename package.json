@@ -11,6 +11,7 @@
     "install:all": "npm install",
     "start": "npm run dev",
     "dev": "node scripts/dev.mjs",
+    "stop": "node scripts/stop-dev.mjs",
     "dev:client": "npm --prefix client run dev",
     "dev:server": "npm --prefix server run dev",
     "build": "npm --prefix server run build && npm --prefix client run build",
