@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   CHAT_ARCHIVE_DIRECTORY_NAME,
+  CODEX_MODEL,
   DEFAULT_SERVER_PORT,
 } from "#constants";
 
@@ -10,6 +11,7 @@ export type ServerConfig = {
   port: number;
   repositoryRoot: string;
   chatArchiveDirectory: string;
+  codexModel: string;
 };
 
 function readPort(value: string | undefined): number {
@@ -33,5 +35,6 @@ export function createServerConfig(environment: NodeJS.ProcessEnv = process.env)
     port: readPort(environment.PORT),
     repositoryRoot,
     chatArchiveDirectory: join(repositoryRoot, CHAT_ARCHIVE_DIRECTORY_NAME),
+    codexModel: CODEX_MODEL,
   };
 }
