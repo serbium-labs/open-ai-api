@@ -15,7 +15,10 @@ export type AppDependencies = {
 export function createApp(dependencies: AppDependencies = {}): Express {
   const config: ServerConfig = dependencies.config ?? createServerConfig();
   const codexService: CodexService =
-    dependencies.codexService ?? new CodexService({ workingDirectory: config.repositoryRoot });
+    dependencies.codexService ?? new CodexService({
+      workingDirectory: config.repositoryRoot,
+      model: config.codexModel,
+    });
   const chatArchiveService: ChatArchiveService =
     dependencies.chatArchiveService ?? new ChatArchiveService(config.chatArchiveDirectory);
   const app: Express = express();

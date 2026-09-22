@@ -189,6 +189,14 @@ Using an API key remains an optional alternative for non-interactive or CI
 environments, but it is not required for local use with an authenticated Codex
 session.
 
+## Codex Model
+
+The server pins the Codex SDK model through `CODEX_MODEL` in
+`server/src/constants/index.ts`. The default is `gpt-5.6-terra`, which balances
+coding capability and cost. Change that constant if Codex reports that the
+current model is deprecated or if you want a different model for all browser
+chat requests handled by this app.
+
 ## Environment Variables
 
 | Variable | Required | Description |

@@ -19,6 +19,7 @@ export type CodexConstructor = new () => CodexClient;
 export type CodexServiceDependencies = {
   CodexClient?: CodexConstructor;
   workingDirectory: string;
+  model: string;
 };
 
 const EDIT_INSTRUCTION_LINES: readonly string[] = [
@@ -31,15 +32,18 @@ const EDIT_INSTRUCTION_LINES: readonly string[] = [
 export class CodexService {
   private readonly CodexClient: CodexConstructor;
   private readonly workingDirectory: string;
+  private readonly model: string;
 
-  public constructor({ CodexClient = Codex, workingDirectory }: CodexServiceDependencies) {
+  public constructor({ CodexClient = Codex, workingDirectory, model }: CodexServiceDependencies) {
     this.CodexClient = CodexClient;
     this.workingDirectory = workingDirectory;
+    this.model = model;
   }
 
   public async run(prompt: string): Promise<string> {
     const codex: CodexClient = new this.CodexClient();
     const thread: CodexThread = codex.startThread({
+      model: this.model,
       workingDirectory: this.workingDirectory,
       sandboxMode: CODEX_SANDBOX_MODE,
       skipGitRepoCheck: true,
