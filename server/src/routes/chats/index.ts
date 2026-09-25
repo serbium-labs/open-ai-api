@@ -23,6 +23,21 @@ function errorMessage(error: unknown): string {
 
 export function createChatsRouter(codexService: CodexService, chatArchiveService: ChatArchiveService): Router {
   const router: Router = Router();
+  const pendingMessages = new Map<string, Promise<void>>();
+
+  async function inChatOrder<T>(chatId: string, action: () => Promise<T>): Promise<T> {
+    const previous = pendingMessages.get(chatId) ?? Promise.resolve();
+    const result = previous.then(action);
+    const settled = result.then(() => {}, () => {});
+    pendingMessages.set(chatId, settled);
+    try {
+      return await result;
+    } finally {
+      if (pendingMessages.get(chatId) === settled) {
+        pendingMessages.delete(chatId);
+      }
+    }
+  }
 
   router.get(
     "/",
@@ -105,10 +120,21 @@ export function createChatsRouter(codexService: CodexService, chatArchiveService
           return;
         }
 
-        await chatArchiveService.appendMessage(request.params.chatId, "user", prompt);
-        const finalResponse: string = await codexService.run(prompt);
-        const chat = await chatArchiveService.appendMessage(request.params.chatId, "assistant", finalResponse);
-        response.status(HTTP_STATUS.ok).json({ chat, finalResponse });
+        const result = await inChatOrder(request.params.chatId, async () => {
+          const previousChat = await chatArchiveService.loadChat(request.params.chatId);
+          const context = previousChat.codexThreadId === undefined && previousChat.messages.length > 0
+            ? `Previous conversation (JSON transcript):\n${JSON.stringify(previousChat.messages.map(({ role, content }) => ({ role, content })))}\n\nCurrent user request:\n${prompt}`
+            : prompt;
+          await chatArchiveService.appendMessage(previousChat.id, "user", prompt);
+          const finalResponse = await codexService.run(
+            context,
+            previousChat.codexThreadId,
+            (id) => chatArchiveService.saveThreadId(previousChat.id, id),
+          );
+          const chat = await chatArchiveService.appendMessage(previousChat.id, "assistant", finalResponse);
+          return { chat, finalResponse };
+        });
+        response.status(HTTP_STATUS.ok).json(result);
       } catch (error: unknown) {
         response.status(isNotFound(error) ? HTTP_STATUS.notFound : HTTP_STATUS.internalServerError).json({
           error: errorMessage(error),

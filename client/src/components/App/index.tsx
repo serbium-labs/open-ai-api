@@ -168,6 +168,7 @@ export function App(): ReactElement {
         currentChatId === undefined
           ? await createChat(undefined)
           : await fetchChat(currentChatId);
+      setCurrentChatId(chat.id);
       const result = await submitChatMessage(chat.id, submittedPrompt);
       const detail = applyChatDetail(result.chat);
 
