@@ -68,18 +68,6 @@ it works with the same ChatGPT account already signed in to Codex.
    npm run dev
    ```
 
-   On macOS/Linux/Git Bash:
-
-   ```bash
-   ./dev.sh
-   ```
-
-   On Windows:
-
-   ```bat
-   dev.bat
-   ```
-
 4. Open <http://localhost:5173>.
 
 ## Usage
@@ -167,6 +155,13 @@ npm run dev:client
 npm run dev:server
 ```
 
+Stop development servers started through `npm run dev` or `npm start` from
+another terminal:
+
+```bash
+npm run stop
+```
+
 Build both projects:
 
 ```bash
@@ -194,6 +189,14 @@ that environment must have its own Codex login.
 Using an API key remains an optional alternative for non-interactive or CI
 environments, but it is not required for local use with an authenticated Codex
 session.
+
+## Codex Model
+
+The server pins the Codex SDK model through `CODEX_MODEL` in
+`server/src/constants/index.ts`. The default is `gpt-5.6-terra`, which balances
+coding capability and cost. Change that constant if Codex reports that the
+current model is deprecated or if you want a different model for all browser
+chat requests handled by this app.
 
 ## Environment Variables
 

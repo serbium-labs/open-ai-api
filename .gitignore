@@ -6,3 +6,4 @@ out/
 openspec
 .agents
 /chats/
+.dev-server-pids.json
