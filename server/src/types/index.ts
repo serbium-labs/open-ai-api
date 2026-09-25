@@ -23,6 +23,7 @@ export type ChatMessage = {
 };
 
 export type ChatSummary = {
+  codexThreadId?: string;
   id: string;
   title: string;
   date: string;

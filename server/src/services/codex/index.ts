@@ -1,17 +1,14 @@
-import { Codex, type RunResult, type SandboxMode, type ThreadOptions } from "@openai/codex-sdk";
+import { Codex, type ThreadEvent, type ThreadOptions } from "@openai/codex-sdk";
 
 import { CODEX_SANDBOX_MODE } from "#constants";
 
 export type CodexThread = {
-  run(prompt: string): Promise<RunResult>;
+  runStreamed(prompt: string): Promise<{ events: AsyncGenerator<ThreadEvent> }>;
 };
 
 export type CodexClient = {
-  startThread(options: ThreadOptions & {
-    workingDirectory: string;
-    sandboxMode: SandboxMode;
-    skipGitRepoCheck: boolean;
-  }): CodexThread;
+  startThread(options: ThreadOptions): CodexThread;
+  resumeThread(id: string, options: ThreadOptions): CodexThread;
 };
 
 export type CodexConstructor = new () => CodexClient;
@@ -40,17 +37,35 @@ export class CodexService {
     this.model = model;
   }
 
-  public async run(prompt: string): Promise<string> {
+  public async run(
+    prompt: string,
+    threadId?: string,
+    onThreadStarted?: (id: string) => Promise<void>,
+  ): Promise<string> {
     const codex: CodexClient = new this.CodexClient();
-    const thread: CodexThread = codex.startThread({
+    const options: ThreadOptions = {
       model: this.model,
       workingDirectory: this.workingDirectory,
       sandboxMode: CODEX_SANDBOX_MODE,
       skipGitRepoCheck: true,
-    });
+    };
+    const thread = threadId === undefined
+      ? codex.startThread(options)
+      : codex.resumeThread(threadId, options);
 
-    const turn: RunResult = await thread.run(`${EDIT_INSTRUCTION_LINES.join(" ")}\n\nUser request:\n${prompt}`);
+    const { events } = await thread.runStreamed(`${EDIT_INSTRUCTION_LINES.join(" ")}\n\nUser request:\n${prompt}`);
+    let finalResponse = "";
+    for await (const event of events) {
+      if (event.type === "thread.started" && threadId === undefined) {
+        await onThreadStarted?.(event.thread_id);
+        threadId = event.thread_id;
+      } else if (event.type === "item.completed" && event.item.type === "agent_message") {
+        finalResponse = event.item.text;
+      } else if (event.type === "turn.failed") {
+        throw new Error(event.error.message);
+      }
+    }
 
-    return turn.finalResponse;
+    return finalResponse;
   }
 }

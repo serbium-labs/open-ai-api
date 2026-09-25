@@ -232,6 +232,14 @@ export class ChatArchiveService {
     return this.loadChat(chatId);
   }
 
+  public async saveThreadId(chatId: string, codexThreadId: string): Promise<void> {
+    const location = await this.findChatLocation(chatId);
+    if (location === undefined) {
+      throw new Error("Chat not found");
+    }
+    await this.writeChatMetadata(location.directory, { ...location.summary, codexThreadId });
+  }
+
   public async appendExchange(chatId: string, prompt: string, finalResponse: string): Promise<ChatDetail> {
     await this.appendMessage(chatId, "user", prompt);
     return this.appendMessage(chatId, "assistant", finalResponse);
@@ -326,7 +334,8 @@ export class ChatArchiveService {
         return undefined;
       }
 
-      return { id, title, date, createdAt, updatedAt };
+      const codexThreadId = asString(parsed.metadata.codexThreadId);
+      return { id, title, date, createdAt, updatedAt, codexThreadId };
     } catch {
       return undefined;
     }
@@ -339,6 +348,7 @@ export class ChatArchiveService {
       formatFrontmatter(
         {
           id: summary.id,
+          codexThreadId: summary.codexThreadId,
           title: summary.title,
           date: summary.date,
           createdAt: summary.createdAt,
