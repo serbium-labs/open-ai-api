@@ -13,6 +13,12 @@ type StoredChatLocation = {
   summary: ChatSummary;
 };
 
+type StoredMessageFile = {
+  name: string;
+  ordinal: number;
+  role: ChatRole;
+};
+
 const FRONTMATTER_DELIMITER = "---";
 const META_EXTENSION = ".meta.md";
 const DEFAULT_TITLE = "New chat";
@@ -96,16 +102,34 @@ function formatFrontmatter(metadata: Metadata, body: string): string {
     if (Array.isArray(value)) {
       lines.push(`${key}:`);
       for (const item of value) {
-        lines.push(`  - ${item}`);
+        lines.push(`  - ${JSON.stringify(item)}`);
       }
       continue;
     }
 
-    lines.push(`${key}: ${value}`);
+    lines.push(`${key}: ${JSON.stringify(value)}`);
   }
 
   lines.push(FRONTMATTER_DELIMITER, body);
   return `${lines.join("\n")}\n`;
+}
+
+function parseMetadataValue(value: string): string {
+  const trimmed: string = value.trim();
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+
+      if (typeof parsed === "string") {
+        return parsed;
+      }
+    } catch {
+      // Keep accepting archives written by the previous permissive serializer.
+    }
+  }
+
+  return value;
 }
 
 function parseFrontmatter(fileContent: string): { metadata: Metadata; body: string } | undefined {
@@ -134,8 +158,9 @@ function parseFrontmatter(fileContent: string): { metadata: Metadata; body: stri
     const arrayItem: RegExpMatchArray | null = line.match(/^\s+-\s*(.*)$/);
 
     if (arrayItem !== null && arrayKey !== undefined) {
-      const value: string[] = Array.isArray(metadata[arrayKey]) ? metadata[arrayKey] : [];
-      value.push(arrayItem[1]);
+      const storedValue: string | string[] | undefined = metadata[arrayKey];
+      const value: string[] = Array.isArray(storedValue) ? storedValue : [];
+      value.push(parseMetadataValue(arrayItem[1]));
       metadata[arrayKey] = value;
       continue;
     }
@@ -147,7 +172,7 @@ function parseFrontmatter(fileContent: string): { metadata: Metadata; body: stri
     }
 
     arrayKey = keyValue[1].trim();
-    metadata[arrayKey] = keyValue[2] === "" ? [] : keyValue[2];
+    metadata[arrayKey] = keyValue[2] === "" ? [] : parseMetadataValue(keyValue[2]);
   }
 
   return { metadata, body: body.replace(/\n$/, "") };
@@ -165,12 +190,30 @@ function messageFileName(ordinal: number, role: ChatRole): string {
   return `${String(ordinal).padStart(3, "0")}-${role}${MARKDOWN_EXTENSION}`;
 }
 
+function messageNoteName(ordinal: number, role: ChatRole): string {
+  return messageFileName(ordinal, role).slice(0, -MARKDOWN_EXTENSION.length);
+}
+
+function wikilink(path: string): string {
+  return `[[${path}]]`;
+}
+
 function resourceMetaPath(path: string): string {
   return `${path}${META_EXTENSION}`;
 }
 
 export class ChatArchiveService {
   public constructor(private readonly directory: string) {}
+
+  public async initialize(): Promise<void> {
+    const locations: StoredChatLocation[] = await this.findChatLocations();
+
+    await Promise.all(
+      locations.map((location: StoredChatLocation) =>
+        this.writeChatMetadata(location.directory, location.summary),
+      ),
+    );
+  }
 
   public async listChats(): Promise<ChatSummary[]> {
     const locations: StoredChatLocation[] = await this.findChatLocations();
@@ -260,7 +303,8 @@ export class ChatArchiveService {
       message.resources = await this.writeResources(resourcesDirectory, ordinal, message);
     }
 
-    await this.writeMessage(messagesDirectory, ordinal, message);
+    const previousMessage: ChatMessage | undefined = existingMessages.at(-1);
+    await this.writeMessage(messagesDirectory, ordinal, message, previousMessage);
     await this.writeChatMetadata(location.directory, {
       ...location.summary,
       title: existingMessages.length === 0 && role === "user" && location.summary.title === DEFAULT_TITLE
@@ -334,6 +378,24 @@ export class ChatArchiveService {
 
   private async writeChatMetadata(chatDirectory: string, summary: ChatSummary): Promise<void> {
     await mkdir(chatDirectory, { recursive: true });
+    const messageFiles: StoredMessageFile[] = await this.listMessageFiles(join(chatDirectory, "messages"));
+    const messageLinks: string[] = messageFiles.map((message: StoredMessageFile) =>
+      wikilink(`messages/${message.name.slice(0, -MARKDOWN_EXTENSION.length)}`),
+    );
+    const bodyLines: string[] = [`# ${summary.title}`];
+
+    if (messageFiles.length > 0) {
+      bodyLines.push(
+        "",
+        "## Messages",
+        "",
+        ...messageFiles.map(
+          (message: StoredMessageFile) =>
+            `- [${String(message.ordinal).padStart(3, "0")} · ${message.role}](messages/${message.name})`,
+        ),
+      );
+    }
+
     await writeFile(
       join(chatDirectory, "chat.md"),
       formatFrontmatter(
@@ -343,11 +405,41 @@ export class ChatArchiveService {
           date: summary.date,
           createdAt: summary.createdAt,
           updatedAt: summary.updatedAt,
+          messages: messageLinks,
         },
-        `# ${summary.title}`,
+        bodyLines.join("\n"),
       ),
       { encoding: UTF8_ENCODING },
     );
+  }
+
+  private async listMessageFiles(messagesDirectory: string): Promise<StoredMessageFile[]> {
+    try {
+      const entries = await readdir(messagesDirectory, { withFileTypes: true });
+      const messages: StoredMessageFile[] = [];
+
+      for (const entry of entries) {
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        const match: RegExpMatchArray | null = entry.name.match(/^(\d+)-(user|assistant)\.md$/);
+
+        if (match === null) {
+          continue;
+        }
+
+        messages.push({
+          name: entry.name,
+          ordinal: Number(match[1]),
+          role: match[2] as ChatRole,
+        });
+      }
+
+      return messages.sort((left: StoredMessageFile, right: StoredMessageFile) => left.ordinal - right.ordinal);
+    } catch {
+      return [];
+    }
   }
 
   private async readMessages(messagesDirectory: string): Promise<ChatMessage[]> {
@@ -392,8 +484,16 @@ export class ChatArchiveService {
     }
   }
 
-  private async writeMessage(messagesDirectory: string, ordinal: number, message: ChatMessage): Promise<void> {
+  private async writeMessage(
+    messagesDirectory: string,
+    ordinal: number,
+    message: ChatMessage,
+    previousMessage: ChatMessage | undefined,
+  ): Promise<void> {
     await mkdir(messagesDirectory, { recursive: true });
+    const resourceNotes: string[] = message.resources.map((resourcePath: string) =>
+      wikilink(`${resourcePath}${META_EXTENSION.slice(0, -MARKDOWN_EXTENSION.length)}`),
+    );
     await writeFile(
       join(messagesDirectory, messageFileName(ordinal, message.role)),
       formatFrontmatter(
@@ -402,7 +502,12 @@ export class ChatArchiveService {
           role: message.role,
           createdAt: message.createdAt,
           ordinal: String(ordinal),
+          chat: wikilink("../chat"),
+          previous: previousMessage === undefined
+            ? undefined
+            : wikilink(messageNoteName(ordinal - 1, previousMessage.role)),
           resources: message.resources,
+          resourceNotes,
         },
         message.content,
       ),
@@ -502,7 +607,7 @@ export class ChatArchiveService {
             language: chunk.language,
             path: resourcePath,
             createdAt: isoTimestamp(),
-            message: `../messages/${messageFileName(assistantOrdinal, "assistant")}`,
+            message: wikilink(`../messages/${messageNoteName(assistantOrdinal, "assistant")}`),
           },
           `[Message](../messages/${messageFileName(assistantOrdinal, "assistant")})`,
         ),

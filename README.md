@@ -124,6 +124,12 @@ date. Each message is saved as its own Markdown file in `messages/`. Assistant
 messages link to generated resources when a response contains fenced code
 blocks.
 
+The archive is also an Obsidian-compatible vault. `chat.md` links to every
+message, messages link back to their chat and to the previous message, and
+resource metadata links to the assistant message that produced it. Existing
+archives are reindexed when the server starts, so their chat and message nodes
+also appear as a connected graph in Obsidian.
+
 Resources are saved in the selected chat's `resources/` folder. Each resource
 keeps the generated code content, while its `.meta.md` sidecar stores the
 language, producing message id, and backlink to the message file.
