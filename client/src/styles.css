@@ -2347,3 +2347,63 @@ pre code {
   }
 
 }
+.message-attachment-file:has(audio) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: min(360px, 100%);
+  padding: 8px;
+}
+
+.message-attachment-file:has(audio) .message-attachment-icon {
+  display: none;
+}
+
+.message-attachment-file audio {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+}
+
+.message-attachment-file:has(audio) .message-attachment-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 32px;
+  padding: 4px 2px;
+}
+
+.voice-waveform span {
+  display: block;
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  opacity: 0.8;
+}
+
+.voice-preview audio {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+}
