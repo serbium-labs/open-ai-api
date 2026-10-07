@@ -31,6 +31,7 @@ function toChatMessages(messages: PersistedChatMessage[]): ChatMessage[] {
     role: message.role,
     content: message.content,
     status: "complete",
+    attachments: message.attachments,
   }));
 }
 
@@ -46,13 +47,21 @@ function applyChatDetail(chat: ChatDetail): {
   };
 }
 
-function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSummary[] {
+function sortedSummariesWith(
+  chat: ChatDetail,
+  summaries: ChatSummary[],
+): ChatSummary[] {
   const nextSummaries: ChatSummary[] = [
     chat,
-    ...summaries.filter((summary: ChatSummary) => summary.id !== chat.id),
+    ...summaries.filter(
+      (summary: ChatSummary) => summary.id !== chat.id,
+    ),
   ];
 
-  return nextSummaries.sort((left: ChatSummary, right: ChatSummary) => right.updatedAt.localeCompare(left.updatedAt));
+  return nextSummaries.sort(
+    (left: ChatSummary, right: ChatSummary) =>
+      right.updatedAt.localeCompare(left.updatedAt),
+  );
 }
 
 function isMobileViewport(): boolean {
@@ -65,10 +74,13 @@ export function App(): ReactElement {
   const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | undefined>(undefined);
+  const [currentChatId, setCurrentChatId] =
+    useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [isChatHistoryOpen, setIsChatHistoryOpen] = useState<boolean>(true);
-  const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
+  const [isChatHistoryOpen, setIsChatHistoryOpen] =
+    useState<boolean>(true);
+  const [isResourcesOpen, setIsResourcesOpen] =
+    useState<boolean>(false);
   const [chatListStatus, setChatListStatus] = useState<string>("");
 
   useEffect(() => {
@@ -95,13 +107,16 @@ export function App(): ReactElement {
         }
 
         const detail = applyChatDetail(chat);
+
         setCurrentChatId(chat.id);
         setMessages(detail.messages);
         setFiles(detail.files);
         setCodeStatus(detail.codeStatus);
       } catch (error: unknown) {
         if (isMounted) {
-          setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
+          setChatListStatus(
+            getErrorMessage(error, UI_TEXT.unexpectedError),
+          );
         }
       }
     }
@@ -145,18 +160,33 @@ export function App(): ReactElement {
       return;
     }
 
-    const title: string | null = window.prompt(UI_TEXT.renamePrompt, chat.title);
+    const title: string | null = window.prompt(
+      UI_TEXT.renamePrompt,
+      chat.title,
+    );
 
     if (title === null || title.trim() === "") {
       return;
     }
 
-    const renamedChat: ChatDetail = await renameChat(chat.id, title.trim());
-    setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(renamedChat, summaries));
+    const renamedChat: ChatDetail = await renameChat(
+      chat.id,
+      title.trim(),
+    );
+
+    setChatSummaries((summaries: ChatSummary[]) =>
+      sortedSummariesWith(renamedChat, summaries),
+    );
   }
 
-  async function handleSubmit(submittedPrompt: string): Promise<void> {
-    const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, submittedPrompt);
+  async function handleSubmit(
+    submittedPrompt: string,
+    attachment: File | null,
+  ): Promise<void> {
+    const nextTurn: AppendPromptTurnResult = appendPromptTurn(
+      messages,
+      submittedPrompt,
+    );
 
     setMessages(nextTurn.messages);
     setPrompt("");
@@ -168,21 +198,38 @@ export function App(): ReactElement {
         currentChatId === undefined
           ? await createChat(undefined)
           : await fetchChat(currentChatId);
+
       setCurrentChatId(chat.id);
-      const result = await submitChatMessage(chat.id, submittedPrompt);
+
+      const result = await submitChatMessage(
+        chat.id,
+        submittedPrompt,
+        attachment,
+      );
+
       const detail = applyChatDetail(result.chat);
 
       setCurrentChatId(result.chat.id);
-      setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
+      setChatSummaries((summaries: ChatSummary[]) =>
+        sortedSummariesWith(result.chat, summaries),
+      );
       setMessages(detail.messages);
       setFiles(detail.files);
       setCodeStatus(detail.codeStatus);
     } catch (error: unknown) {
-      const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
+      const message: string = getErrorMessage(
+        error,
+        UI_TEXT.unexpectedError,
+      );
 
       setMessages((currentMessages: ChatMessage[]) =>
-        failAssistantMessage(currentMessages, nextTurn.assistantMessageId, message),
+        failAssistantMessage(
+          currentMessages,
+          nextTurn.assistantMessageId,
+          message,
+        ),
       );
+
       setCodeStatus(getCodeStatus(files));
     } finally {
       setIsRunning(false);
@@ -212,36 +259,69 @@ export function App(): ReactElement {
   return (
     <>
       {isChatHistoryOpen ? (
-        <aside className="chat-history-sidebar" aria-label="Saved chats">
+        <aside
+          className="chat-history-sidebar"
+          aria-label="Saved chats"
+        >
           <div className="chat-history-header">
             <h2>{UI_TEXT.chatHistoryTitle}</h2>
+
             <button
               className="chat-history-new-button"
               type="button"
               disabled={messages.length === 0 || isRunning}
               aria-label={UI_TEXT.newChatButton}
-              data-tooltip={messages.length === 0 ? UI_TEXT.emptyChatTooltip : UI_TEXT.newChatButton}
+              data-tooltip={
+                messages.length === 0
+                  ? UI_TEXT.emptyChatTooltip
+                  : UI_TEXT.newChatButton
+              }
               onClick={handleNewChat}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                focusable="false"
+              >
                 <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
               </svg>
             </button>
           </div>
-          {chatListStatus ? <p className="chat-history-status">{chatListStatus}</p> : null}
-          <nav className="chat-history-list" aria-label="Chat history">
+
+          {chatListStatus ? (
+            <p className="chat-history-status">
+              {chatListStatus}
+            </p>
+          ) : null}
+
+          <nav
+            className="chat-history-list"
+            aria-label="Chat history"
+          >
             {chatSummaries.map((chat: ChatSummary) => (
               <div
-                className={`chat-history-item${chat.id === currentChatId ? " chat-history-item-active" : ""}${
-                  isRunning && chat.id !== currentChatId ? " chat-history-item-locked" : ""
+                className={`chat-history-item${
+                  chat.id === currentChatId
+                    ? " chat-history-item-active"
+                    : ""
+                }${
+                  isRunning && chat.id !== currentChatId
+                    ? " chat-history-item-locked"
+                    : ""
                 }`}
                 key={chat.id}
               >
                 <button
                   className="chat-history-open-button"
                   type="button"
-                  disabled={isRunning && chat.id !== currentChatId}
-                  aria-current={chat.id === currentChatId ? "page" : undefined}
+                  disabled={
+                    isRunning && chat.id !== currentChatId
+                  }
+                  aria-current={
+                    chat.id === currentChatId
+                      ? "page"
+                      : undefined
+                  }
                   onClick={() => {
                     void openChat(chat.id);
                   }}
@@ -249,6 +329,7 @@ export function App(): ReactElement {
                   <span>{chat.title}</span>
                   <small>{chat.date}</small>
                 </button>
+
                 <button
                   className="chat-history-rename-button"
                   type="button"
@@ -259,7 +340,11 @@ export function App(): ReactElement {
                     void handleRenameChat(chat);
                   }}
                 >
-                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    focusable="false"
+                  >
                     <path d="m4 16.6-.7 4.1 4.1-.7L18.7 8.7l-3.4-3.4L4 16.6Zm13.2-12.7 3 3 .8-.8a2.1 2.1 0 0 0-3-3l-.8.8Z" />
                   </svg>
                 </button>
@@ -268,63 +353,137 @@ export function App(): ReactElement {
           </nav>
         </aside>
       ) : null}
+
       <button
-        className={`chat-history-toggle${isChatHistoryOpen ? " chat-history-toggle-open" : ""}`}
+        className={`chat-history-toggle${
+          isChatHistoryOpen
+            ? " chat-history-toggle-open"
+            : ""
+        }`}
         type="button"
-        aria-label={isChatHistoryOpen ? UI_TEXT.hideChatHistoryButton : UI_TEXT.chatHistoryButton}
+        aria-label={
+          isChatHistoryOpen
+            ? UI_TEXT.hideChatHistoryButton
+            : UI_TEXT.chatHistoryButton
+        }
         aria-expanded={isChatHistoryOpen}
-        data-tooltip={isChatHistoryOpen ? UI_TEXT.hideChatHistoryTooltip : UI_TEXT.chatHistoryTooltip}
+        data-tooltip={
+          isChatHistoryOpen
+            ? UI_TEXT.hideChatHistoryTooltip
+            : UI_TEXT.chatHistoryTooltip
+        }
         onClick={toggleChatHistory}
       >
         {isChatHistoryOpen ? (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />
           </svg>
         ) : (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13ZM6.5 5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H10V5H6.5ZM12 5v14h5.5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5H12Z" />
           </svg>
         )}
       </button>
-      <main className={`app-shell${isChatHistoryOpen ? " app-shell-with-history" : ""}${isResourcesOpen ? " app-shell-with-resources" : ""}`}>
+
+      <main
+        className={`app-shell${
+          isChatHistoryOpen
+            ? " app-shell-with-history"
+            : ""
+        }${
+          isResourcesOpen
+            ? " app-shell-with-resources"
+            : ""
+        }`}
+      >
         <div className="chat-layout">
           <section
-            className={`chat-column${messages.length === 0 ? " chat-column-empty" : " chat-column-active"}`}
+            className={`chat-column${
+              messages.length === 0
+                ? " chat-column-empty"
+                : " chat-column-active"
+            }`}
             aria-label="Chat"
           >
-            <ChatTranscript messages={messages} />
+          <ChatTranscript
+  messages={messages}
+  chatId={currentChatId}
+/>
+
             <PromptForm
               prompt={prompt}
               isRunning={isRunning}
               onPromptChange={setPrompt}
-              onSubmit={(submittedPrompt: string) => {
-                void handleSubmit(submittedPrompt);
-              }}
+              onSubmit={(
+                submittedPrompt: string,
+                attachment: File | null,
+              ) =>
+                handleSubmit(
+                  submittedPrompt,
+                  attachment,
+                )
+              }
             />
           </section>
         </div>
       </main>
+
       <button
-        className={`resources-toggle${isResourcesOpen ? " resources-toggle-open" : ""}`}
+        className={`resources-toggle${
+          isResourcesOpen
+            ? " resources-toggle-open"
+            : ""
+        }`}
         type="button"
-        aria-label={isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
+        aria-label={
+          isResourcesOpen
+            ? UI_TEXT.hideResourcesButton
+            : UI_TEXT.resourcesButton
+        }
         aria-expanded={isResourcesOpen}
-        data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
+        data-tooltip={
+          isResourcesOpen
+            ? UI_TEXT.hideResourcesTooltip
+            : UI_TEXT.resourcesTooltip
+        }
         onClick={toggleResources}
       >
         {isResourcesOpen ? (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />
           </svg>
         ) : (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13ZM6.5 5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H10V5H6.5ZM12 5v14h5.5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5H12Z" />
           </svg>
         )}
       </button>
+
       {isResourcesOpen ? (
-        <aside className="resources-sidebar" aria-label="Chat resources">
-          <CodeFiles files={files} status={codeStatus} />
+        <aside
+          className="resources-sidebar"
+          aria-label="Chat resources"
+        >
+          <CodeFiles
+            files={files}
+            status={codeStatus}
+          />
         </aside>
       ) : null}
     </>
