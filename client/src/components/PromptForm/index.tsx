@@ -14,7 +14,10 @@ export type PromptFormProps = {
   prompt: string;
   isRunning: boolean;
   onPromptChange: (prompt: string) => void;
-  onSubmit: (prompt: string, attachment: File | null) => Promise<void>;
+  onSubmit: (
+    prompt: string,
+    attachment: File | null,
+  ) => Promise<void>;
 };
 
 function getFileIcon(file: File): string {
@@ -25,11 +28,21 @@ function getFileIcon(file: File): string {
     return "🖼️";
   }
 
-  if (fileType === "application/pdf" || fileName.endsWith(".pdf")) {
+  if (fileType.startsWith("audio/")) {
+    return "🎤";
+  }
+
+  if (
+    fileType === "application/pdf" ||
+    fileName.endsWith(".pdf")
+  ) {
     return "📕";
   }
 
-  if (fileName.endsWith(".doc") || fileName.endsWith(".docx")) {
+  if (
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx")
+  ) {
     return "📘";
   }
 
@@ -68,60 +81,320 @@ function getFileIcon(file: File): string {
   return "📎";
 }
 
+function audioExtension(mimeType: string): string {
+  if (mimeType.includes("mp4")) {
+    return "m4a";
+  }
+
+  if (mimeType.includes("ogg")) {
+    return "ogg";
+  }
+
+  return "webm";
+}
+
+async function createWaveform(
+  audioBlob: Blob,
+  barCount: number = 40,
+): Promise<number[]> {
+  const arrayBuffer: ArrayBuffer =
+    await audioBlob.arrayBuffer();
+
+  const audioContext = new AudioContext();
+
+  try {
+    const audioBuffer: AudioBuffer =
+      await audioContext.decodeAudioData(
+        arrayBuffer.slice(0),
+      );
+
+    const channelData: Float32Array =
+      audioBuffer.getChannelData(0);
+
+    const samplesPerBar: number = Math.max(
+      1,
+      Math.floor(channelData.length / barCount),
+    );
+
+    const values: number[] = [];
+
+    for (let bar = 0; bar < barCount; bar += 1) {
+      const start: number = bar * samplesPerBar;
+      const end: number = Math.min(
+        start + samplesPerBar,
+        channelData.length,
+      );
+
+      let peak = 0;
+
+      for (let index = start; index < end; index += 1) {
+        peak = Math.max(
+          peak,
+          Math.abs(channelData[index]),
+        );
+      }
+
+      values.push(Math.max(0.08, peak));
+    }
+
+    const maxPeak: number = Math.max(...values);
+
+    return values.map(
+      (value: number) =>
+        maxPeak === 0 ? 0.08 : value / maxPeak,
+    );
+  } finally {
+    await audioContext.close();
+  }
+}
+
 export function PromptForm({
   prompt,
   isRunning,
   onPromptChange,
   onSubmit,
 }: PromptFormProps): ReactElement {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef =
+    useRef<HTMLTextAreaElement>(null);
 
-  const [attachment, setAttachment] = useState<File | null>(null);
+  const fileInputRef =
+    useRef<HTMLInputElement>(null);
 
-  const isPromptEmpty: boolean = prompt.trim() === "";
-  const hasAttachment: boolean = attachment !== null;
+  const mediaRecorderRef =
+    useRef<MediaRecorder | null>(null);
+
+  const mediaStreamRef =
+    useRef<MediaStream | null>(null);
+
+  const audioChunksRef =
+    useRef<Blob[]>([]);
+
+  const [attachment, setAttachment] =
+    useState<File | null>(null);
+
+  const [isRecording, setIsRecording] =
+    useState<boolean>(false);
+
+  const [audioPreviewUrl, setAudioPreviewUrl] =
+    useState<string | null>(null);
+
+  const [waveform, setWaveform] =
+    useState<number[]>([]);
+
+  const [recordingError, setRecordingError] =
+    useState<string>("");
+
+  const isPromptEmpty: boolean =
+    prompt.trim() === "";
+
+  const hasAttachment: boolean =
+    attachment !== null;
 
   const isSubmitDisabled: boolean =
-    isRunning || (isPromptEmpty && !hasAttachment);
+    isRunning ||
+    isRecording ||
+    (isPromptEmpty && !hasAttachment);
 
   const submitTooltip: string = isRunning
     ? hasAttachment
       ? "Uploading attachment..."
       : UI_TEXT.running
-    : isPromptEmpty && !hasAttachment
-      ? UI_TEXT.emptyPromptTooltip
-      : UI_TEXT.runButton;
+    : isRecording
+      ? "Stop recording before sending"
+      : isPromptEmpty && !hasAttachment
+        ? UI_TEXT.emptyPromptTooltip
+        : UI_TEXT.runButton;
 
   useEffect(() => {
-    const textarea: HTMLTextAreaElement | null = textareaRef.current;
+    const textarea:
+      | HTMLTextAreaElement
+      | null = textareaRef.current;
 
     if (textarea === null) {
       return;
     }
 
     textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
+    textarea.style.height =
+      `${textarea.scrollHeight}px`;
   }, [prompt]);
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current
+        ?.getTracks()
+        .forEach((track: MediaStreamTrack) => {
+          track.stop();
+        });
+
+      if (audioPreviewUrl !== null) {
+        URL.revokeObjectURL(audioPreviewUrl);
+      }
+    };
+  }, [audioPreviewUrl]);
+
+  function clearAudioPreview(): void {
+    setAudioPreviewUrl(
+      (currentUrl: string | null) => {
+        if (currentUrl !== null) {
+          URL.revokeObjectURL(currentUrl);
+        }
+
+        return null;
+      },
+    );
+
+    setWaveform([]);
+  }
 
   function handleAttachmentChange(
     event: ChangeEvent<HTMLInputElement>,
   ): void {
-    const file: File | undefined = event.target.files?.[0];
+    const file: File | undefined =
+      event.target.files?.[0];
 
     if (file === undefined) {
       return;
     }
 
+    clearAudioPreview();
+    setRecordingError("");
     setAttachment(file);
   }
 
   function removeAttachment(): void {
+    clearAudioPreview();
     setAttachment(null);
+    setRecordingError("");
 
     if (fileInputRef.current !== null) {
       fileInputRef.current.value = "";
     }
+  }
+
+  async function startRecording(): Promise<void> {
+    setRecordingError("");
+
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setRecordingError(
+        "Voice recording is not supported in this browser.",
+      );
+      return;
+    }
+
+    try {
+      const stream: MediaStream =
+        await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+
+      const recorder = new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.addEventListener(
+        "dataavailable",
+        (event: BlobEvent) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(
+              event.data,
+            );
+          }
+        },
+      );
+
+      recorder.addEventListener(
+        "stop",
+        async () => {
+          const mimeType: string =
+            recorder.mimeType || "audio/webm";
+
+          const audioBlob = new Blob(
+            audioChunksRef.current,
+            {
+              type: mimeType,
+            },
+          );
+
+          const extension: string =
+            audioExtension(mimeType);
+
+          const audioFile = new File(
+            [audioBlob],
+            `voice-message-${Date.now()}.${extension}`,
+            {
+              type: mimeType,
+            },
+          );
+
+          clearAudioPreview();
+
+          const previewUrl: string =
+            URL.createObjectURL(audioBlob);
+
+          setAttachment(audioFile);
+          setAudioPreviewUrl(previewUrl);
+
+          try {
+            const waveformValues: number[] =
+              await createWaveform(audioBlob);
+
+            setWaveform(waveformValues);
+          } catch {
+            setWaveform([]);
+          }
+
+          audioChunksRef.current = [];
+
+          stream
+            .getTracks()
+            .forEach(
+              (track: MediaStreamTrack) => {
+                track.stop();
+              },
+            );
+
+          mediaStreamRef.current = null;
+          mediaRecorderRef.current = null;
+        },
+      );
+
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setRecordingError(
+        "Microphone access was denied or unavailable.",
+      );
+    }
+  }
+
+  function stopRecording(): void {
+    const recorder: MediaRecorder | null =
+      mediaRecorderRef.current;
+
+    if (
+      recorder === null ||
+      recorder.state === "inactive"
+    ) {
+      return;
+    }
+
+    recorder.stop();
+    setIsRecording(false);
+  }
+
+  function handleRecordButton(): void {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+
+    void startRecording();
   }
 
   async function submitMessage(): Promise<void> {
@@ -131,14 +404,18 @@ export function PromptForm({
 
     await onSubmit(prompt, attachment);
 
+    clearAudioPreview();
     setAttachment(null);
+    setRecordingError("");
 
     if (fileInputRef.current !== null) {
       fileInputRef.current.value = "";
     }
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
     event.preventDefault();
     void submitMessage();
   }
@@ -146,7 +423,10 @@ export function PromptForm({
   function handleKeyDown(
     event: KeyboardEvent<HTMLTextAreaElement>,
   ): void {
-    if (event.key !== "Enter" || event.shiftKey) {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey
+    ) {
       return;
     }
 
@@ -155,7 +435,10 @@ export function PromptForm({
   }
 
   return (
-    <form className="prompt-form" onSubmit={handleSubmit}>
+    <form
+      className="prompt-form"
+      onSubmit={handleSubmit}
+    >
       <div className="prompt-composer">
         {attachment !== null && (
           <div className="attachment-preview">
@@ -166,9 +449,42 @@ export function PromptForm({
               {getFileIcon(attachment)}
             </span>
 
-            <span className="attachment-name">
-              {attachment.name}
-            </span>
+            {audioPreviewUrl !== null ? (
+              <div className="voice-preview">
+                {waveform.length > 0 && (
+                  <div
+                    className="voice-waveform"
+                    aria-hidden="true"
+                  >
+                    {waveform.map(
+                      (
+                        value: number,
+                        index: number,
+                      ) => (
+                        <span
+                          key={index}
+                          style={{
+                            height: `${Math.max(
+                              4,
+                              value * 28,
+                            )}px`,
+                          }}
+                        />
+                      ),
+                    )}
+                  </div>
+                )}
+
+                <audio
+                  controls
+                  src={audioPreviewUrl}
+                />
+              </div>
+            ) : (
+              <span className="attachment-name">
+                {attachment.name}
+              </span>
+            )}
 
             {isRunning ? (
               <span className="attachment-status">
@@ -187,25 +503,54 @@ export function PromptForm({
           </div>
         )}
 
+        {recordingError !== "" && (
+          <span className="attachment-status">
+            {recordingError}
+          </span>
+        )}
+
         <div className="prompt-input-row">
           <input
             ref={fileInputRef}
             className="attachment-input"
             type="file"
             aria-label="Attach file"
-            disabled={isRunning}
+            disabled={isRunning || isRecording}
             onChange={handleAttachmentChange}
           />
 
           <button
             className="attachment-button"
             type="button"
-            disabled={isRunning}
+            disabled={isRunning || isRecording}
             aria-label="Attach file"
             data-tooltip="Attach file"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() =>
+              fileInputRef.current?.click()
+            }
           >
             <span aria-hidden="true">📎</span>
+          </button>
+
+          <button
+            className="attachment-button"
+            type="button"
+            disabled={isRunning}
+            aria-label={
+              isRecording
+                ? "Stop voice recording"
+                : "Record voice message"
+            }
+            data-tooltip={
+              isRecording
+                ? "Stop recording"
+                : "Record voice message"
+            }
+            onClick={handleRecordButton}
+          >
+            <span aria-hidden="true">
+              {isRecording ? "⏹️" : "🎤"}
+            </span>
           </button>
 
           <textarea
@@ -214,18 +559,26 @@ export function PromptForm({
             name="prompt"
             rows={1}
             aria-label="Message"
-            placeholder={UI_TEXT.promptPlaceholder}
+            placeholder={
+              isRecording
+                ? "Recording..."
+                : UI_TEXT.promptPlaceholder
+            }
             value={prompt}
-            disabled={isRunning}
+            disabled={isRunning || isRecording}
             onChange={(event) =>
-              onPromptChange(event.target.value)
+              onPromptChange(
+                event.target.value,
+              )
             }
             onKeyDown={handleKeyDown}
           />
 
           <button
             className={`send-button${
-              isRunning ? " send-button-running" : ""
+              isRunning
+                ? " send-button-running"
+                : ""
             }`}
             type="submit"
             disabled={isSubmitDisabled}

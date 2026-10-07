@@ -526,15 +526,24 @@ function renderAttachment(
   if (chatId === undefined) {
     return (
       <div className="message-attachment-file" key={key}>
-        <span className="message-attachment-icon" aria-hidden="true">
+        <span
+          className="message-attachment-icon"
+          aria-hidden="true"
+        >
           {attachmentIcon(attachment)}
         </span>
-        <span className="message-attachment-name">{attachment.name}</span>
+
+        <span className="message-attachment-name">
+          {attachment.name}
+        </span>
       </div>
     );
   }
 
-  const url: string = attachmentUrl(chatId, attachment.path);
+  const url: string = attachmentUrl(
+    chatId,
+    attachment.path,
+  );
 
   if (attachment.mimeType.startsWith("image/")) {
     return (
@@ -551,10 +560,36 @@ function renderAttachment(
           alt={attachment.name}
           loading="lazy"
         />
+
         <span className="message-attachment-caption">
           {attachment.name}
         </span>
       </a>
+    );
+  }
+
+  if (attachment.mimeType.startsWith("audio/")) {
+    return (
+      <div
+        className="message-attachment-file"
+        key={key}
+      >
+        <span
+          className="message-attachment-icon"
+          aria-hidden="true"
+        >
+          🎤
+        </span>
+
+        <audio
+          controls
+          src={url}
+        />
+
+        <span className="message-attachment-name">
+          {attachment.name}
+        </span>
+      </div>
     );
   }
 
@@ -566,10 +601,16 @@ function renderAttachment(
       rel="noreferrer"
       key={key}
     >
-      <span className="message-attachment-icon" aria-hidden="true">
+      <span
+        className="message-attachment-icon"
+        aria-hidden="true"
+      >
         {attachmentIcon(attachment)}
       </span>
-      <span className="message-attachment-name">{attachment.name}</span>
+
+      <span className="message-attachment-name">
+        {attachment.name}
+      </span>
     </a>
   );
 }
