@@ -124,6 +124,7 @@ language, producing message id, and backlink to the message file.
 
 When Codex returns fenced code blocks, the server extracts each block. If a
 code block includes a safe relative path in the fence info, that path is used.
+
 For example:
 
 ````markdown
@@ -189,6 +190,131 @@ that environment must have its own Codex login.
 Using an API key remains an optional alternative for non-interactive or CI
 environments, but it is not required for local use with an authenticated Codex
 session.
+
+## MCP Servers
+
+This app can use MCP servers configured in the local Codex environment. The
+server creates a Codex client without overriding MCP configuration, so Codex
+inherits the MCP servers available to the operating-system user running the app.
+
+MCP configuration can be stored globally in:
+
+```text
+~/.codex/config.toml
+```
+
+or at the project level in:
+
+```text
+.codex/config.toml
+```
+
+Project-level `.codex/config.toml` settings are loaded only for projects that
+Codex trusts.
+
+### Remote HTTP MCP Server
+
+A remote MCP server can be added with the Codex CLI:
+
+```bash
+codex mcp add pet-care --url https://mcp.example.com
+```
+
+Or it can be configured directly in `config.toml`:
+
+```toml
+[mcp_servers.pet-care]
+url = "https://mcp.example.com"
+```
+
+If the server uses bearer-token authentication, keep the token in an
+environment variable instead of storing the secret directly in the config:
+
+```toml
+[mcp_servers.pet-care]
+url = "https://mcp.example.com"
+bearer_token_env_var = "PET_CARE_MCP_TOKEN"
+```
+
+Then export the token before starting Codex or this application:
+
+```bash
+export PET_CARE_MCP_TOKEN="replace-with-your-token"
+npm run dev
+```
+
+### Local stdio MCP Server
+
+A local stdio MCP server can be configured with a command and arguments:
+
+```toml
+[mcp_servers.pet-care-local]
+command = "node"
+args = ["/absolute/path/to/pet-care-mcp/server.js"]
+```
+
+Use an absolute path when possible so that the MCP server can be started
+reliably regardless of the directory from which this application is launched.
+
+### OAuth Authentication
+
+Some remote MCP servers use OAuth instead of a static token. Complete the OAuth
+authorization flow supported by the MCP server and Codex before using the
+server through this application.
+
+Do not store real credentials, access tokens, or secrets in this repository.
+
+### Example Configuration
+
+The following example uses placeholder values for a pet-care platform:
+
+```toml
+[mcp_servers.pet-care]
+url = "https://mcp.example.com"
+bearer_token_env_var = "PET_CARE_MCP_TOKEN"
+
+[mcp_servers.pet-care-local]
+command = "node"
+args = ["/absolute/path/to/pet-care-mcp/server.js"]
+```
+
+Such an MCP server could expose tools for reading a pet profile, recording
+weight, managing feeding schedules, or recording expenses.
+
+### Verify MCP Tools
+
+Check that Codex sees the configured MCP servers:
+
+```bash
+codex mcp list
+```
+
+Before testing through this application, verify the connection directly in
+Codex by asking it to use one of the MCP server's tools.
+
+Then start this application and send a browser chat request that requires the
+external tool. Because the app uses the same local Codex configuration, the
+configured MCP tools should also be available when requests are sent through
+this app.
+
+### Troubleshooting
+
+If an MCP server cannot be used:
+
+- run `codex mcp list` and confirm that the server is configured,
+- verify the remote URL or local command and arguments,
+- make sure required environment variables are exported in the shell that
+  starts the application,
+- complete or refresh OAuth authentication if required,
+- make sure project-level `.codex/config.toml` is being loaded from a trusted
+  project,
+- test the MCP server directly in Codex to separate MCP configuration problems
+  from application problems,
+- restart the application after changing environment variables or MCP
+  configuration.
+
+The application also instructs Codex that available MCP tools may be used when
+a workflow requires reading data or performing actions in connected services.
 
 ## Codex Model
 
