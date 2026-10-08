@@ -1,7 +1,53 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runComposerSubmission } from "./index";
+import {
+  createRecordedAudioFile,
+  detectRecordedAudioFormat,
+  runComposerSubmission,
+  selectRecorderMimeType,
+} from "./index";
+
+test("selectRecorderMimeType chooses the first format the browser can encode", () => {
+  assert.equal(
+    selectRecorderMimeType((mimeType: string) =>
+      mimeType === "audio/ogg;codecs=opus"),
+    "audio/ogg;codecs=opus",
+  );
+  assert.equal(selectRecorderMimeType(() => false), undefined);
+});
+
+test("recorded Ogg bytes get an Ogg MIME type and extension even when the chunk was mislabeled", async () => {
+  const mislabeledChunk = new Blob(
+    [new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 1, 2])],
+    { type: "audio/webm" },
+  );
+
+  const format = await detectRecordedAudioFormat(mislabeledChunk);
+  const { blob, file } = await createRecordedAudioFile(
+    [mislabeledChunk],
+    123,
+  );
+
+  assert.deepEqual(format, {
+    extension: "ogg",
+    mimeType: "audio/ogg",
+  });
+  assert.equal(blob.type, "audio/ogg");
+  assert.equal(file.type, "audio/ogg");
+  assert.equal(file.name, "voice-message-123.ogg");
+});
+
+test("recordings with unknown container bytes are rejected instead of renamed", async () => {
+  await assert.rejects(
+    createRecordedAudioFile([
+      new Blob(["not an audio container"], {
+        type: "audio/webm",
+      }),
+    ]),
+    /unsupported audio format/i,
+  );
+});
 
 function deferredPromise(): {
   promise: Promise<void>;

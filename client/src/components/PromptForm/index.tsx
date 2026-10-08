@@ -126,16 +126,91 @@ function getFileIcon(file: File): string {
   return "📎";
 }
 
-function audioExtension(mimeType: string): string {
-  if (mimeType.includes("mp4")) {
-    return "m4a";
+export type RecordedAudioFormat = {
+  extension: "m4a" | "ogg" | "webm";
+  mimeType: "audio/mp4" | "audio/ogg" | "audio/webm";
+};
+
+const RECORDER_MIME_TYPES: readonly string[] = [
+  "audio/webm;codecs=opus",
+  "audio/ogg;codecs=opus",
+  "audio/mp4",
+];
+
+export function selectRecorderMimeType(
+  isTypeSupported: (mimeType: string) => boolean,
+): string | undefined {
+  return RECORDER_MIME_TYPES.find(isTypeSupported);
+}
+
+export async function detectRecordedAudioFormat(
+  audioBlob: Blob,
+): Promise<RecordedAudioFormat | undefined> {
+  const bytes = new Uint8Array(
+    await audioBlob.slice(0, 4096).arrayBuffer(),
+  );
+
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x4f &&
+    bytes[1] === 0x67 &&
+    bytes[2] === 0x67 &&
+    bytes[3] === 0x53
+  ) {
+    return { extension: "ogg", mimeType: "audio/ogg" };
   }
 
-  if (mimeType.includes("ogg")) {
-    return "ogg";
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3
+  ) {
+    const headerText = new TextDecoder("latin1").decode(bytes);
+
+    if (headerText.toLowerCase().includes("webm")) {
+      return { extension: "webm", mimeType: "audio/webm" };
+    }
   }
 
-  return "webm";
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  ) {
+    return { extension: "m4a", mimeType: "audio/mp4" };
+  }
+
+  return undefined;
+}
+
+export async function createRecordedAudioFile(
+  chunks: Blob[],
+  timestamp: number = Date.now(),
+): Promise<{ blob: Blob; file: File }> {
+  // Do not carry a potentially incorrect MediaRecorder label onto the bytes.
+  const untypedBlob = new Blob(chunks);
+  const format = await detectRecordedAudioFormat(untypedBlob);
+
+  if (format === undefined) {
+    throw new Error(
+      "The browser produced an unsupported audio format. Try a current version of Chrome, Firefox, or Safari.",
+    );
+  }
+
+  const blob = new Blob([untypedBlob], {
+    type: format.mimeType,
+  });
+  const file = new File(
+    [blob],
+    `voice-message-${timestamp}.${format.extension}`,
+    { type: format.mimeType },
+  );
+
+  return { blob, file };
 }
 
 async function createWaveform(
@@ -230,6 +305,9 @@ export function PromptForm({
   const [isRequestingMicrophone, setIsRequestingMicrophone] =
     useState<boolean>(false);
 
+  const [isFinalizingRecording, setIsFinalizingRecording] =
+    useState<boolean>(false);
+
   const [isSubmitting, setIsSubmitting] =
     useState<boolean>(false);
 
@@ -256,14 +334,17 @@ export function PromptForm({
     isSubmitting ||
     isRecording ||
     isRequestingMicrophone ||
+    isFinalizingRecording ||
     (isPromptEmpty && !hasAttachment);
 
   const submitTooltip: string = isRunning || isSubmitting
     ? hasAttachment
       ? "Uploading attachment..."
       : UI_TEXT.running
-    : isRecording || isRequestingMicrophone
-      ? "Stop recording before sending"
+    : isFinalizingRecording
+      ? "Preparing voice recording..."
+      : isRecording || isRequestingMicrophone
+        ? "Stop recording before sending"
       : isPromptEmpty && !hasAttachment
         ? UI_TEXT.emptyPromptTooltip
         : UI_TEXT.runButton;
@@ -398,7 +479,16 @@ export function PromptForm({
         return;
       }
 
-      const recorder = new MediaRecorder(stream);
+      const selectedMimeType: string | undefined =
+        selectRecorderMimeType((mimeType: string) =>
+          MediaRecorder.isTypeSupported(mimeType),
+        );
+      const recorder = new MediaRecorder(
+        stream,
+        selectedMimeType === undefined
+          ? undefined
+          : { mimeType: selectedMimeType },
+      );
 
       mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
@@ -418,19 +508,13 @@ export function PromptForm({
 
         if (isMountedRef.current) {
           setIsRecording(false);
+          setIsFinalizingRecording(false);
           setRecordingError("Voice recording failed. Please try again.");
         }
       };
 
       recorder.onstop = () => {
-        const mimeType: string =
-          recorder.mimeType || "audio/webm";
-
-        const audioBlob = new Blob(
-          audioChunksRef.current,
-          { type: mimeType },
-        );
-
+        const chunks: Blob[] = audioChunksRef.current;
         audioChunksRef.current = [];
         stopMediaStream(stream);
         mediaRecorderRef.current = null;
@@ -439,34 +523,52 @@ export function PromptForm({
           return;
         }
 
-        if (audioBlob.size === 0) {
+        if (chunks.reduce(
+          (size: number, chunk: Blob) => size + chunk.size,
+          0,
+        ) === 0) {
           setRecordingError("No audio was captured. Please try again.");
+          setIsFinalizingRecording(false);
           return;
         }
 
-        const extension: string = audioExtension(mimeType);
-        const audioFile = new File(
-          [audioBlob],
-          `voice-message-${Date.now()}.${extension}`,
-          { type: mimeType },
-        );
+        void createRecordedAudioFile(chunks)
+          .then(({ blob, file }) => {
+            if (!isMountedRef.current) {
+              return;
+            }
 
-        clearAudioPreview();
+            clearAudioPreview();
 
-        const previewUrl: string = URL.createObjectURL(audioBlob);
-        audioPreviewUrlRef.current = previewUrl;
-        setAttachment(audioFile);
-        setAudioPreviewUrl(previewUrl);
+            const previewUrl: string = URL.createObjectURL(blob);
+            audioPreviewUrlRef.current = previewUrl;
+            setAttachment(file);
+            setAudioPreviewUrl(previewUrl);
 
-        void createWaveform(audioBlob)
-          .then((waveformValues: number[]) => {
+            void createWaveform(blob)
+              .then((waveformValues: number[]) => {
+                if (isMountedRef.current) {
+                  setWaveform(waveformValues);
+                }
+              })
+              .catch(() => {
+                if (isMountedRef.current) {
+                  setWaveform([]);
+                }
+              });
+          })
+          .catch((error: unknown) => {
             if (isMountedRef.current) {
-              setWaveform(waveformValues);
+              setRecordingError(
+                error instanceof Error
+                  ? error.message
+                  : "The recorded audio format is unsupported.",
+              );
             }
           })
-          .catch(() => {
+          .finally(() => {
             if (isMountedRef.current) {
-              setWaveform([]);
+              setIsFinalizingRecording(false);
             }
           });
       };
@@ -506,6 +608,7 @@ export function PromptForm({
 
     recorder.stop();
     setIsRecording(false);
+    setIsFinalizingRecording(true);
   }
 
   function handleRecordButton(): void {
@@ -693,14 +796,24 @@ export function PromptForm({
             className="attachment-input"
             type="file"
             aria-label="Attach file"
-            disabled={isRunning || isRecording || isRequestingMicrophone}
+            disabled={
+              isRunning ||
+              isRecording ||
+              isRequestingMicrophone ||
+              isFinalizingRecording
+            }
             onChange={handleAttachmentChange}
           />
 
           <button
             className="attachment-button icon-tooltip"
             type="button"
-            disabled={isRunning || isRecording || isRequestingMicrophone}
+            disabled={
+              isRunning ||
+              isRecording ||
+              isRequestingMicrophone ||
+              isFinalizingRecording
+            }
             aria-label="Attach file"
             data-tooltip="Attach file"
             onClick={() =>
@@ -715,7 +828,11 @@ export function PromptForm({
               isRecording ? " recording-stop-button" : ""
             }`}
             type="button"
-            disabled={isRunning || isRequestingMicrophone}
+            disabled={
+              isRunning ||
+              isRequestingMicrophone ||
+              isFinalizingRecording
+            }
             aria-label={
               isRecording
                 ? "Stop voice recording"
@@ -764,7 +881,11 @@ export function PromptForm({
               aria-label="Message"
               placeholder={UI_TEXT.promptPlaceholder}
               value={prompt}
-              disabled={isRunning || isRequestingMicrophone}
+              disabled={
+                isRunning ||
+                isRequestingMicrophone ||
+                isFinalizingRecording
+              }
               onChange={(event) =>
                 onPromptChange(
                   event.target.value,
