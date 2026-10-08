@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 
 import { createChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
@@ -7,6 +7,7 @@ import {
   failAssistantMessage,
   type AppendPromptTurnResult,
   type ChatMessage,
+  type ChatMessageAttachment,
 } from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
@@ -69,6 +70,7 @@ function isMobileViewport(): boolean {
 }
 
 export function App(): ReactElement {
+  const optimisticAttachmentUrlsRef = useRef<Set<string>>(new Set());
   const [prompt, setPrompt] = useState<string>("");
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
@@ -128,6 +130,36 @@ export function App(): ReactElement {
     };
   }, []);
 
+  useEffect(() => {
+    const activeUrls = new Set(
+      messages.flatMap((message: ChatMessage) =>
+        message.attachments.flatMap(
+          (attachment: ChatMessageAttachment) =>
+            attachment.previewUrl === undefined
+              ? []
+              : [attachment.previewUrl],
+        ),
+      ),
+    );
+
+    for (const url of optimisticAttachmentUrlsRef.current) {
+      if (!activeUrls.has(url)) {
+        URL.revokeObjectURL(url);
+        optimisticAttachmentUrlsRef.current.delete(url);
+      }
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of optimisticAttachmentUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+
+      optimisticAttachmentUrlsRef.current.clear();
+    };
+  }, []);
+
   async function openChat(chatId: string): Promise<void> {
     if (isRunning || chatId === currentChatId) {
       return;
@@ -183,9 +215,23 @@ export function App(): ReactElement {
     submittedPrompt: string,
     attachment: File | null,
   ): Promise<void> {
+    const optimisticAttachments: ChatMessageAttachment[] = [];
+
+    if (attachment !== null) {
+      const previewUrl: string = URL.createObjectURL(attachment);
+      optimisticAttachmentUrlsRef.current.add(previewUrl);
+      optimisticAttachments.push({
+        name: attachment.name,
+        mimeType: attachment.type || "application/octet-stream",
+        path: "",
+        previewUrl,
+      });
+    }
+
     const nextTurn: AppendPromptTurnResult = appendPromptTurn(
       messages,
       submittedPrompt,
+      optimisticAttachments,
     );
 
     setMessages(nextTurn.messages);
@@ -231,6 +277,7 @@ export function App(): ReactElement {
       );
 
       setCodeStatus(getCodeStatus(files));
+      throw error;
     } finally {
       setIsRunning(false);
     }

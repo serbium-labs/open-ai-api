@@ -2,12 +2,19 @@ import { useEffect, useRef, type ReactElement, type ReactNode } from "react";
 
 import { CopyButton } from "@components/CopyButton";
 
+import { AudioPlayer } from "@components/AudioPlayer";
 import { HighlightedCode } from "@components/HighlightedCode";
 import type { ChatAttachment } from "@models";
 
 export type ChatMessageRole = "user" | "assistant";
 
 export type ChatMessageStatus = "complete" | "pending" | "error";
+
+export type ChatMessageAttachment = ChatAttachment & {
+
+  previewUrl?: string;
+
+};
 
 export type ChatMessage = {
 
@@ -19,7 +26,7 @@ export type ChatMessage = {
 
   status: ChatMessageStatus;
 
-  attachments: ChatAttachment[];
+  attachments: ChatMessageAttachment[];
 
 };
 
@@ -159,7 +166,15 @@ export function parseMessageContent(content: string): MessageSegment[] {
 
 }
 
-export function appendPromptTurn(messages: ChatMessage[], prompt: string): AppendPromptTurnResult {
+export function appendPromptTurn(
+
+  messages: ChatMessage[],
+
+  prompt: string,
+
+  attachments: ChatMessageAttachment[] = [],
+
+): AppendPromptTurnResult {
 
   const nextIndex: number = messages.length + 1;
 
@@ -178,7 +193,7 @@ export function appendPromptTurn(messages: ChatMessage[], prompt: string): Appen
         role: "user",
         content: prompt,
         status: "complete",
-        attachments: [],
+        attachments,
       },
 
       {
@@ -519,11 +534,41 @@ function attachmentIcon(attachment: ChatAttachment): string {
 }
 
 function renderAttachment(
-  attachment: ChatAttachment,
+  attachment: ChatMessageAttachment,
   chatId: string | undefined,
   key: string,
 ): ReactNode {
-  if (chatId === undefined) {
+  if (attachment.mimeType.startsWith("audio/")) {
+    const audioUrl: string | undefined =
+      attachment.previewUrl ??
+      (chatId === undefined
+        ? undefined
+        : attachmentUrl(chatId, attachment.path));
+
+    return (
+      <div
+        className="message-attachment-file message-audio-attachment"
+        key={key}
+      >
+        {audioUrl === undefined ? (
+          <span className="attachment-status">
+            Audio preview unavailable
+          </span>
+        ) : (
+          <AudioPlayer
+            src={audioUrl}
+            label={attachment.name}
+          />
+        )}
+
+        <span className="message-attachment-name">
+          {attachment.name}
+        </span>
+      </div>
+    );
+  }
+
+  if (chatId === undefined && attachment.previewUrl === undefined) {
     return (
       <div className="message-attachment-file" key={key}>
         <span
@@ -540,10 +585,9 @@ function renderAttachment(
     );
   }
 
-  const url: string = attachmentUrl(
-    chatId,
-    attachment.path,
-  );
+  const url: string =
+    attachment.previewUrl ??
+    attachmentUrl(chatId as string, attachment.path);
 
   if (attachment.mimeType.startsWith("image/")) {
     return (
@@ -565,31 +609,6 @@ function renderAttachment(
           {attachment.name}
         </span>
       </a>
-    );
-  }
-
-  if (attachment.mimeType.startsWith("audio/")) {
-    return (
-      <div
-        className="message-attachment-file"
-        key={key}
-      >
-        <span
-          className="message-attachment-icon"
-          aria-hidden="true"
-        >
-          🎤
-        </span>
-
-        <audio
-          controls
-          src={url}
-        />
-
-        <span className="message-attachment-name">
-          {attachment.name}
-        </span>
-      </div>
     );
   }
 
@@ -728,7 +747,7 @@ export function ChatTranscript({ messages, chatId }: ChatTranscriptProps): React
             {message.attachments.length > 0 ? (
               <div className="message-attachments">
                 {message.attachments.map(
-                  (attachment: ChatAttachment, index: number) =>
+                  (attachment: ChatMessageAttachment, index: number) =>
                     renderAttachment(
                       attachment,
                       chatId,
