@@ -77,6 +77,7 @@ export function App(): ReactElement {
   const [currentChatId, setCurrentChatId] =
     useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isChatHistoryOpen, setIsChatHistoryOpen] =
     useState<boolean>(true);
   const [isResourcesOpen, setIsResourcesOpen] =
@@ -182,14 +183,17 @@ export function App(): ReactElement {
   async function handleSubmit(
     submittedPrompt: string,
     attachment: File | null,
-  ): Promise<void> {
-    const nextTurn: AppendPromptTurnResult = appendPromptTurn(
-      messages,
-      submittedPrompt,
-    );
+  ): Promise<boolean> {
+    const nextTurn: AppendPromptTurnResult | null = attachment === null
+      ? appendPromptTurn(messages, submittedPrompt)
+      : null;
 
-    setMessages(nextTurn.messages);
-    setPrompt("");
+    if (nextTurn !== null) {
+      setMessages(nextTurn.messages);
+      setPrompt("");
+    }
+
+    setSubmitError(null);
     setIsRunning(true);
     setCodeStatus(UI_TEXT.loadingCode);
 
@@ -216,21 +220,28 @@ export function App(): ReactElement {
       setMessages(detail.messages);
       setFiles(detail.files);
       setCodeStatus(detail.codeStatus);
+      setPrompt("");
+      return true;
     } catch (error: unknown) {
       const message: string = getErrorMessage(
         error,
         UI_TEXT.unexpectedError,
       );
 
-      setMessages((currentMessages: ChatMessage[]) =>
-        failAssistantMessage(
-          currentMessages,
-          nextTurn.assistantMessageId,
-          message,
-        ),
-      );
+      if (nextTurn !== null) {
+        setMessages((currentMessages: ChatMessage[]) =>
+          failAssistantMessage(
+            currentMessages,
+            nextTurn.assistantMessageId,
+            message,
+          ),
+        );
+      } else {
+        setSubmitError(message);
+      }
 
       setCodeStatus(getCodeStatus(files));
+      return false;
     } finally {
       setIsRunning(false);
     }
@@ -421,6 +432,7 @@ export function App(): ReactElement {
             <PromptForm
               prompt={prompt}
               isRunning={isRunning}
+              submitError={submitError}
               onPromptChange={setPrompt}
               onSubmit={(
                 submittedPrompt: string,

@@ -13,8 +13,9 @@ import { UI_TEXT } from "@constants";
 export type PromptFormProps = {
   prompt: string;
   isRunning: boolean;
+  submitError: string | null;
   onPromptChange: (prompt: string) => void;
-  onSubmit: (prompt: string, attachment: File | null) => Promise<void>;
+  onSubmit: (prompt: string, attachment: File | null) => Promise<boolean>;
 };
 
 function getFileIcon(file: File): string {
@@ -71,6 +72,7 @@ function getFileIcon(file: File): string {
 export function PromptForm({
   prompt,
   isRunning,
+  submitError,
   onPromptChange,
   onSubmit,
 }: PromptFormProps): ReactElement {
@@ -87,7 +89,7 @@ export function PromptForm({
 
   const submitTooltip: string = isRunning
     ? hasAttachment
-      ? "Uploading attachment..."
+      ? "Sending attachment..."
       : UI_TEXT.running
     : isPromptEmpty && !hasAttachment
       ? UI_TEXT.emptyPromptTooltip
@@ -129,7 +131,11 @@ export function PromptForm({
       return;
     }
 
-    await onSubmit(prompt, attachment);
+    const wasSent = await onSubmit(prompt, attachment);
+
+    if (!wasSent) {
+      return;
+    }
 
     setAttachment(null);
 
@@ -172,7 +178,7 @@ export function PromptForm({
 
             {isRunning ? (
               <span className="attachment-status">
-                Uploading...
+                Sending attachment...
               </span>
             ) : (
               <button
@@ -185,6 +191,12 @@ export function PromptForm({
               </button>
             )}
           </div>
+        )}
+
+        {submitError !== null && (
+          <p className="attachment-status" role="alert">
+            Send failed: {submitError}. Please retry.
+          </p>
         )}
 
         <div className="prompt-input-row">
