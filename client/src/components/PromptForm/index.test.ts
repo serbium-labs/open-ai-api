@@ -82,10 +82,11 @@ test("voice submission clears immediately and ignores a duplicate while pending"
     lock,
     prompt: "",
     attachment,
-    onSubmit: async (): Promise<void> => {
+    onSubmit: async (): Promise<boolean> => {
       submitCount += 1;
       events.push("submit");
       await pending.promise;
+      return true;
     },
     onStart: (): void => {
       events.push("clear-preview");
@@ -131,7 +132,10 @@ test("failed voice submission restores the recording for retry", async () => {
     attachment: new File(["voice"], "voice.webm", {
       type: "audio/webm",
     }),
-    onSubmit: () => pending.promise,
+    onSubmit: async (): Promise<boolean> => {
+      await pending.promise;
+      return true;
+    },
     onStart: () => events.push("clear-preview"),
     onSuccess: () => events.push("success"),
     onFailure: () => events.push("restore-preview"),
@@ -142,6 +146,31 @@ test("failed voice submission restores the recording for retry", async () => {
 
   pending.reject(new Error("Upload failed"));
   await submission;
+
+  assert.deepEqual(events, [
+    "clear-preview",
+    "restore-preview",
+    "finish",
+  ]);
+  assert.equal(lock.current, false);
+});
+
+test("a false submission result restores the recording for retry", async () => {
+  const lock = { current: false };
+  const events: string[] = [];
+
+  await runComposerSubmission({
+    lock,
+    prompt: "",
+    attachment: new File(["voice"], "voice.webm", {
+      type: "audio/webm",
+    }),
+    onSubmit: async () => false,
+    onStart: () => events.push("clear-preview"),
+    onSuccess: () => events.push("success"),
+    onFailure: () => events.push("restore-preview"),
+    onFinish: () => events.push("finish"),
+  });
 
   assert.deepEqual(events, [
     "clear-preview",

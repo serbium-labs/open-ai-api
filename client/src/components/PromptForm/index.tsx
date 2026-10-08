@@ -11,15 +11,25 @@ import {
 import { AudioPlayer, formatAudioTime } from "@components/AudioPlayer";
 import { Icon } from "@components/Icon";
 import { UI_TEXT } from "@constants";
+import {
+  File as FileIcon,
+  FileArchive,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Paperclip,
+  type LucideIcon,
+} from "lucide-react";
 
 export type PromptFormProps = {
   prompt: string;
   isRunning: boolean;
+  submitError: string | null;
   onPromptChange: (prompt: string) => void;
   onSubmit: (
     prompt: string,
     attachment: File | null,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 };
 
 type SubmissionLock = {
@@ -55,8 +65,13 @@ export async function runComposerSubmission({
   onStart();
 
   try {
-    await onSubmit(prompt, attachment);
-    onSuccess();
+    const wasSent: boolean = await onSubmit(prompt, attachment);
+
+    if (wasSent) {
+      onSuccess();
+    } else {
+      onFailure(new Error("Message submission failed"));
+    }
   } catch (error: unknown) {
     onFailure(error);
   } finally {
@@ -65,30 +80,22 @@ export async function runComposerSubmission({
   }
 }
 
-function getFileIcon(file: File): string {
+function getFileIcon(file: File): LucideIcon {
   const fileName = file.name.toLowerCase();
   const fileType = file.type.toLowerCase();
 
   if (fileType.startsWith("image/")) {
-    return "🖼️";
-  }
-
-  if (fileType.startsWith("audio/")) {
-    return "🎤";
+    return FileImage;
   }
 
   if (
     fileType === "application/pdf" ||
-    fileName.endsWith(".pdf")
-  ) {
-    return "📕";
-  }
-
-  if (
+    fileName.endsWith(".pdf") ||
     fileName.endsWith(".doc") ||
-    fileName.endsWith(".docx")
+    fileName.endsWith(".docx") ||
+    fileType.startsWith("text/")
   ) {
-    return "📘";
+    return FileText;
   }
 
   if (
@@ -96,7 +103,7 @@ function getFileIcon(file: File): string {
     fileName.endsWith(".xlsx") ||
     fileName.endsWith(".csv")
   ) {
-    return "📊";
+    return FileSpreadsheet;
   }
 
   if (
@@ -104,26 +111,10 @@ function getFileIcon(file: File): string {
     fileName.endsWith(".rar") ||
     fileName.endsWith(".7z")
   ) {
-    return "🗜️";
+    return FileArchive;
   }
 
-  if (
-    fileType.startsWith("text/") ||
-    fileName.endsWith(".txt") ||
-    fileName.endsWith(".md") ||
-    fileName.endsWith(".json") ||
-    fileName.endsWith(".js") ||
-    fileName.endsWith(".ts") ||
-    fileName.endsWith(".tsx") ||
-    fileName.endsWith(".jsx") ||
-    fileName.endsWith(".py") ||
-    fileName.endsWith(".html") ||
-    fileName.endsWith(".css")
-  ) {
-    return "📄";
-  }
-
-  return "📎";
+  return FileIcon;
 }
 
 export type RecordedAudioFormat = {
@@ -271,6 +262,7 @@ async function createWaveform(
 export function PromptForm({
   prompt,
   isRunning,
+  submitError,
   onPromptChange,
   onSubmit,
 }: PromptFormProps): ReactElement {
@@ -339,7 +331,7 @@ export function PromptForm({
 
   const submitTooltip: string = isRunning || isSubmitting
     ? hasAttachment
-      ? "Uploading attachment..."
+      ? "Sending attachment..."
       : UI_TEXT.running
     : isFinalizingRecording
       ? "Preparing voice recording..."
@@ -722,11 +714,11 @@ export function PromptForm({
       <div className="prompt-composer">
         {attachment !== null && (
           <div className="attachment-preview">
-            <span
-              className="attachment-icon"
-              aria-hidden="true"
-            >
-              {getFileIcon(attachment)}
+            <span className="attachment-icon" aria-hidden="true">
+              {(() => {
+                const Icon = getFileIcon(attachment);
+                return <Icon size={20} strokeWidth={1.75} />;
+              })()}
             </span>
 
             {audioPreviewUrl !== null ? (
@@ -768,7 +760,7 @@ export function PromptForm({
 
             {isRunning ? (
               <span className="attachment-status">
-                Uploading...
+                Sending attachment...
               </span>
             ) : (
               <button
@@ -788,6 +780,12 @@ export function PromptForm({
           <span className="recording-error" role="alert">
             {recordingError}
           </span>
+        )}
+
+        {submitError !== null && (
+          <p className="attachment-status" role="alert">
+            Send failed: {submitError}. Please retry.
+          </p>
         )}
 
         <div className="prompt-input-row">
@@ -820,7 +818,7 @@ export function PromptForm({
               fileInputRef.current?.click()
             }
           >
-            <Icon name="attachment" />
+            <Paperclip size={20} strokeWidth={1.75} aria-hidden="true" />
           </button>
 
           <button

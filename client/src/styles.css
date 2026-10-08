@@ -2613,3 +2613,18 @@ pre code {
     text-align: left;
   }
 }
+
+/* Issue #40: keep image filename below its preview */
+.message-attachment-image-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.message-attachment-image-container .message-attachment-caption {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

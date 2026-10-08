@@ -591,24 +591,24 @@ function renderAttachment(
 
   if (attachment.mimeType.startsWith("image/")) {
     return (
-      <a
-        className="message-attachment-image-link"
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        key={key}
-      >
-        <img
-          className="message-attachment-image"
-          src={url}
-          alt={attachment.name}
-          loading="lazy"
-        />
-
+      <div className="message-attachment-image-container" key={key}>
+        <a
+          className="message-attachment-image-link"
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <img
+            className="message-attachment-image"
+            src={url}
+            alt={attachment.name}
+            loading="lazy"
+          />
+        </a>
         <span className="message-attachment-caption">
           {attachment.name}
         </span>
-      </a>
+      </div>
     );
   }
 
