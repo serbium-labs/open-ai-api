@@ -9,6 +9,15 @@ import {
 } from "react";
 
 import { UI_TEXT } from "@constants";
+import {
+  File,
+  FileArchive,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Paperclip,
+  type LucideIcon,
+} from "lucide-react";
 
 export type PromptFormProps = {
   prompt: string;
@@ -18,20 +27,22 @@ export type PromptFormProps = {
   onSubmit: (prompt: string, attachment: File | null) => Promise<boolean>;
 };
 
-function getFileIcon(file: File): string {
+function getFileIcon(file: File): LucideIcon {
   const fileName = file.name.toLowerCase();
   const fileType = file.type.toLowerCase();
 
   if (fileType.startsWith("image/")) {
-    return "🖼️";
+    return FileImage;
   }
 
-  if (fileType === "application/pdf" || fileName.endsWith(".pdf")) {
-    return "📕";
-  }
-
-  if (fileName.endsWith(".doc") || fileName.endsWith(".docx")) {
-    return "📘";
+  if (
+    fileType === "application/pdf" ||
+    fileName.endsWith(".pdf") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx") ||
+    fileType.startsWith("text/")
+  ) {
+    return FileText;
   }
 
   if (
@@ -39,7 +50,7 @@ function getFileIcon(file: File): string {
     fileName.endsWith(".xlsx") ||
     fileName.endsWith(".csv")
   ) {
-    return "📊";
+    return FileSpreadsheet;
   }
 
   if (
@@ -47,26 +58,10 @@ function getFileIcon(file: File): string {
     fileName.endsWith(".rar") ||
     fileName.endsWith(".7z")
   ) {
-    return "🗜️";
+    return FileArchive;
   }
 
-  if (
-    fileType.startsWith("text/") ||
-    fileName.endsWith(".txt") ||
-    fileName.endsWith(".md") ||
-    fileName.endsWith(".json") ||
-    fileName.endsWith(".js") ||
-    fileName.endsWith(".ts") ||
-    fileName.endsWith(".tsx") ||
-    fileName.endsWith(".jsx") ||
-    fileName.endsWith(".py") ||
-    fileName.endsWith(".html") ||
-    fileName.endsWith(".css")
-  ) {
-    return "📄";
-  }
-
-  return "📎";
+  return File;
 }
 
 export function PromptForm({
@@ -165,11 +160,11 @@ export function PromptForm({
       <div className="prompt-composer">
         {attachment !== null && (
           <div className="attachment-preview">
-            <span
-              className="attachment-icon"
-              aria-hidden="true"
-            >
-              {getFileIcon(attachment)}
+            <span className="attachment-icon" aria-hidden="true">
+              {(() => {
+                const Icon = getFileIcon(attachment);
+                return <Icon size={20} strokeWidth={1.75} />;
+              })()}
             </span>
 
             <span className="attachment-name">
@@ -217,7 +212,7 @@ export function PromptForm({
             data-tooltip="Attach file"
             onClick={() => fileInputRef.current?.click()}
           >
-            <span aria-hidden="true">📎</span>
+            <Paperclip size={20} strokeWidth={1.75} aria-hidden="true" />
           </button>
 
           <textarea
