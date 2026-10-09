@@ -1,11 +1,24 @@
 import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import multer from "multer";
-import { Router, type Request, type Response } from "express";
+import {
+  Router,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 
 import { HTTP_STATUS } from "#constants";
 import type { CodexService } from "#services/codex";
 import type { ChatArchiveService } from "#services/chat-archive";
+import {
+  inspectAudioUpload,
+  looksLikeAudioUpload,
+  type NormalizedAudioUpload,
+} from "#services/audio-format";
+import type { AudioTranscriber } from "#services/audio-transcription";
 import type {
   ChatCreateRequestBody,
   ChatDetailResponse,
@@ -17,7 +30,7 @@ import type {
 } from "#models";
 
 const upload = multer({
-  dest: "uploads/",
+  dest: join(tmpdir(), "codex-chat-uploads"),
   limits: {
     fileSize: 20 * 1024 * 1024,
   },
@@ -37,9 +50,130 @@ function errorMessage(error: unknown): string {
     : "Unexpected server error";
 }
 
+type ProcessChatMessageOptions = {
+  audioTranscriber: AudioTranscriber;
+  chatArchiveService: ChatArchiveService;
+  chatId: string;
+  codexService: CodexService;
+  file: Express.Multer.File | undefined;
+  prompt: string;
+};
+
+export async function processChatMessage({
+  audioTranscriber,
+  chatArchiveService,
+  chatId,
+  codexService,
+  file,
+  prompt,
+}: ProcessChatMessageOptions): Promise<ChatPromptResponse> {
+  const previousChat = await chatArchiveService.loadChat(chatId);
+
+  let userContent = prompt;
+  let normalizedAudio: NormalizedAudioUpload | undefined;
+
+  if (
+    file !== undefined &&
+    looksLikeAudioUpload(file.originalname, file.mimetype)
+  ) {
+    normalizedAudio = await inspectAudioUpload(
+      file.path,
+      file.originalname,
+    );
+    const transcript = await audioTranscriber.transcribe({
+      path: file.path,
+      sizeBytes: file.size,
+    });
+    const transcriptContent =
+      `Voice message transcript:\n${transcript}`;
+
+    userContent = prompt === ""
+      ? transcriptContent
+      : `${prompt}\n\n${transcriptContent}`;
+  }
+
+  const context =
+    previousChat.codexThreadId === undefined &&
+    previousChat.messages.length > 0
+      ? `Previous conversation (JSON transcript):\n${JSON.stringify(
+          previousChat.messages.map(
+            ({ role, content }) => ({ role, content }),
+          ),
+        )}\n\nCurrent user request:\n${userContent}`
+      : userContent;
+
+  const attachmentInput = file === undefined
+    ? undefined
+    : {
+        originalName:
+          normalizedAudio?.originalName ?? file.originalname,
+        mimeType: normalizedAudio?.mimeType ?? file.mimetype,
+        temporaryPath: file.path,
+      };
+  const chatAfterUserMessage =
+    await chatArchiveService.appendMessage(
+      previousChat.id,
+      "user",
+      userContent,
+      attachmentInput,
+    );
+
+  const imagePath: string | undefined =
+    file?.mimetype.startsWith("image/")
+      ? file.path
+      : undefined;
+
+  let codexContext = context;
+
+  if (
+    file !== undefined &&
+    normalizedAudio === undefined &&
+    !file.mimetype.startsWith("image/")
+  ) {
+    const userMessage = chatAfterUserMessage.messages.at(-1);
+    const attachment = userMessage?.attachments.at(0);
+
+    if (attachment !== undefined) {
+      const storedAttachmentPath =
+        await chatArchiveService.getAttachmentPath(
+          previousChat.id,
+          attachment.path,
+        );
+
+      const attachmentInstruction =
+        `Attached file:\n` +
+        `Name: ${attachment.name}\n` +
+        `MIME type: ${attachment.mimeType}\n` +
+        `Local path: ${storedAttachmentPath}\n\n` +
+        `Inspect this file when answering the user.`;
+
+      codexContext = context.trim() === ""
+        ? attachmentInstruction
+        : `${context}\n\n${attachmentInstruction}`;
+    }
+  }
+
+  const finalResponse = await codexService.run(
+    codexContext,
+    previousChat.codexThreadId,
+    (id) =>
+      chatArchiveService.saveThreadId(previousChat.id, id),
+    imagePath,
+  );
+
+  const chat = await chatArchiveService.appendMessage(
+    previousChat.id,
+    "assistant",
+    finalResponse,
+  );
+
+  return { chat, finalResponse };
+}
+
 export function createChatsRouter(
   codexService: CodexService,
   chatArchiveService: ChatArchiveService,
+  audioTranscriber: AudioTranscriber,
 ): Router {
   const router: Router = Router();
   const pendingMessages = new Map<string, Promise<void>>();
@@ -249,98 +383,14 @@ export function createChatsRouter(
 
         const result = await inChatOrder(
           request.params.chatId,
-          async () => {
-            const previousChat =
-              await chatArchiveService.loadChat(
-                request.params.chatId,
-              );
-
-            const context =
-              previousChat.codexThreadId === undefined &&
-              previousChat.messages.length > 0
-                ? `Previous conversation (JSON transcript):\n${JSON.stringify(
-                    previousChat.messages.map(
-                      ({ role, content }) => ({
-                        role,
-                        content,
-                      }),
-                    ),
-                  )}\n\nCurrent user request:\n${prompt}`
-                : prompt;
-
-           const chatAfterUserMessage =
-  await chatArchiveService.appendMessage(
-    previousChat.id,
-    "user",
-    prompt,
-    request.file === undefined
-      ? undefined
-      : {
-          originalName: request.file.originalname,
-          mimeType: request.file.mimetype,
-          temporaryPath: request.file.path,
-        },
-  );
-
-const imagePath: string | undefined =
-  request.file?.mimetype.startsWith("image/")
-    ? request.file.path
-    : undefined;
-
-let codexContext = context;
-
-if (
-  request.file !== undefined &&
-  !request.file.mimetype.startsWith("image/")
-) {
-  const userMessage = chatAfterUserMessage.messages.at(-1);
-  const attachment = userMessage?.attachments.at(0);
-
-  if (attachment !== undefined) {
-    const storedAttachmentPath =
-      await chatArchiveService.getAttachmentPath(
-        previousChat.id,
-        attachment.path,
-      );
-
-    const attachmentInstruction =
-      `Attached file:\n` +
-      `Name: ${attachment.name}\n` +
-      `MIME type: ${attachment.mimeType}\n` +
-      `Local path: ${storedAttachmentPath}\n\n` +
-      `Inspect this file when answering the user.`;
-
-    codexContext =
-      context.trim() === ""
-        ? attachmentInstruction
-        : `${context}\n\n${attachmentInstruction}`;
-  }
-}
-
-const finalResponse =
-  await codexService.run(
-    codexContext,
-                previousChat.codexThreadId,
-                (id) =>
-                  chatArchiveService.saveThreadId(
-                    previousChat.id,
-                    id,
-                  ),
-                imagePath,
-              );
-
-            const chat =
-              await chatArchiveService.appendMessage(
-                previousChat.id,
-                "assistant",
-                finalResponse,
-              );
-
-            return {
-              chat,
-              finalResponse,
-            };
-          },
+          () => processChatMessage({
+            audioTranscriber,
+            chatArchiveService,
+            chatId: request.params.chatId,
+            codexService,
+            file: request.file,
+            prompt,
+          }),
         );
 
         response.status(HTTP_STATUS.ok).json(result);
@@ -361,6 +411,31 @@ const finalResponse =
           }).catch(() => {});
         }
       }
+    },
+  );
+
+  router.use(
+    (
+      error: unknown,
+      _request: Request,
+      response: Response<ErrorResponse>,
+      next: NextFunction,
+    ) => {
+      if (!(error instanceof multer.MulterError)) {
+        next(error);
+        return;
+      }
+
+      if (error.code === "LIMIT_FILE_SIZE") {
+        response.status(HTTP_STATUS.payloadTooLarge).json({
+          error: "Attachment is too large. The limit is 20 MB.",
+        });
+        return;
+      }
+
+      response.status(HTTP_STATUS.badRequest).json({
+        error: `Attachment upload failed: ${error.message}`,
+      });
     },
   );
 

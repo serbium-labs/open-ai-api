@@ -660,7 +660,7 @@ h1 {
 
 .prompt-input-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -717,6 +717,20 @@ button:disabled {
   opacity: 0.7;
 }
 
+button:focus-visible,
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-focus);
+}
+
+.control-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 .attachment-input {
   display: none;
 }
@@ -742,6 +756,17 @@ button:disabled {
 
 .attachment-button:disabled {
   cursor: wait;
+}
+
+.recording-stop-button {
+  border-color: var(--color-error-border);
+  background: var(--color-error-surface);
+  color: #c73737;
+}
+
+.recording-stop-button:hover:not(:disabled) {
+  background: #ffe5e5;
+  color: #a91f1f;
 }
 
 .attachment-preview {
@@ -801,6 +826,54 @@ button:disabled {
   transform: none;
 }
 
+.attachment-remove-button .control-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.recording-error {
+  grid-column: 1 / -1;
+  color: #a91f1f;
+  font-size: 13px;
+}
+
+.recording-state {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--color-text);
+}
+
+.recording-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d83232;
+  box-shadow: 0 0 0 4px rgba(216, 50, 50, 0.14);
+  animation: recording-pulse 1.2s ease-in-out infinite;
+}
+
+.recording-label {
+  font-weight: 700;
+}
+
+.recording-state time {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.recording-input-note {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .send-button {
   display: inline-grid;
   place-items: center;
@@ -826,6 +899,52 @@ button:disabled {
   width: 20px;
   height: 20px;
   fill: currentColor;
+}
+
+.icon-tooltip {
+  position: relative;
+}
+
+.icon-tooltip::after {
+  position: absolute;
+  z-index: 40;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  width: max-content;
+  max-width: 220px;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--color-tooltip);
+  color: var(--color-text-inverse);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.icon-tooltip::before {
+  position: absolute;
+  z-index: 40;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  border: 6px solid transparent;
+  border-top-color: var(--color-tooltip);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.icon-tooltip:hover::after,
+.icon-tooltip:hover::before,
+.icon-tooltip:focus-visible::after,
+.icon-tooltip:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .copy-button {
@@ -2140,6 +2259,19 @@ pre code {
 
 }
 
+@keyframes recording-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.58;
+    transform: scale(0.82);
+  }
+}
+
 
 
 @keyframes chat-column-settle-down {
@@ -2347,6 +2479,141 @@ pre code {
   }
 
 }
+.message-audio-attachment {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: min(360px, 100%);
+  padding: 8px;
+}
+
+.message-audio-attachment .message-attachment-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-preview {
+  display: grid;
+  gap: 8px;
+  width: min(360px, 56vw);
+  min-width: 0;
+}
+
+.voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 32px;
+  padding: 4px 2px;
+}
+
+.voice-waveform span {
+  display: block;
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  opacity: 0.8;
+}
+
+.audio-player {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.audio-player > audio {
+  display: none;
+}
+
+.audio-play-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.audio-play-button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.audio-play-button .control-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.audio-progress-group {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.audio-progress {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.audio-progress:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.audio-time {
+  min-width: 6.5em;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.audio-error {
+  grid-column: 1 / -1;
+  color: #a91f1f;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .recording-input-note {
+    display: none;
+  }
+
+  .recording-state {
+    grid-template-columns: auto auto auto;
+  }
+
+  .voice-preview {
+    width: min(250px, 52vw);
+  }
+
+  .audio-progress-group {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .audio-time {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
 /* Issue #40: keep image filename below its preview */
 .message-attachment-image-container {
   display: flex;

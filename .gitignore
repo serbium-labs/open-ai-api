@@ -6,6 +6,7 @@ out/
 openspec
 .agents
 /chats/
+/models/
 .dev-server-pids.json
 code-to-edit/
 responses/

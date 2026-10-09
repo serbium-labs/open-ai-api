@@ -3,6 +3,10 @@ import express, { type Express } from "express";
 import { API_ROUTES } from "#constants";
 import { createServerConfig, type ServerConfig } from "#config";
 import { createChatsRouter } from "#routes/chats";
+import {
+  AudioTranscriptionService,
+  type AudioTranscriber,
+} from "#services/audio-transcription";
 import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
 
@@ -10,6 +14,7 @@ export type AppDependencies = {
   config?: ServerConfig;
   codexService?: CodexService;
   chatArchiveService?: ChatArchiveService;
+  audioTranscriber?: AudioTranscriber;
 };
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -21,10 +26,21 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     });
   const chatArchiveService: ChatArchiveService =
     dependencies.chatArchiveService ?? new ChatArchiveService(config.chatArchiveDirectory);
+  const audioTranscriber: AudioTranscriber =
+    dependencies.audioTranscriber ?? new AudioTranscriptionService({
+      ...config.audioTranscription,
+    });
   const app: Express = express();
 
   app.use(express.json());
-  app.use(API_ROUTES.chats, createChatsRouter(codexService, chatArchiveService));
+  app.use(
+    API_ROUTES.chats,
+    createChatsRouter(
+      codexService,
+      chatArchiveService,
+      audioTranscriber,
+    ),
+  );
 
   return app;
 }
