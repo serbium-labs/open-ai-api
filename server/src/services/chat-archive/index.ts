@@ -1,295 +1,580 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, posix, relative, sep } from "node:path";
+import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+
+import { dirname, extname, isAbsolute, join, normalize, posix, relative, sep } from "node:path";
+
 import { randomUUID } from "node:crypto";
 
 import { MARKDOWN_EXTENSION, UTF8_ENCODING } from "#constants";
-import type { ChatDetail, ChatMessage, ChatResource, ChatRole, ChatSummary } from "#models";
+
+import type {
+  ChatAttachment,
+  ChatDetail,
+  ChatMessage,
+  ChatResource,
+  ChatRole,
+  ChatSummary,
+} from "#models";
+
 import { extractOutputCodeChunks, type OutputCodeChunk } from "#services/output-code";
 
 type Metadata = Record<string, string | string[] | undefined>;
 
 type StoredChatLocation = {
+
   directory: string;
+
   summary: ChatSummary;
+
 };
 
 type StoredMessageFile = {
+
   name: string;
+
   ordinal: number;
+
   role: ChatRole;
+
+};
+
+type IncomingAttachment = {
+  originalName: string;
+  mimeType: string;
+  temporaryPath: string;
 };
 
 const FRONTMATTER_DELIMITER = "---";
+
 const META_EXTENSION = ".meta.md";
+
 const DEFAULT_TITLE = "New chat";
+
 const LANGUAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
+
   ["bash", "sh"],
+
   ["css", "css"],
+
   ["html", "html"],
+
   ["javascript", "js"],
+
   ["js", "js"],
+
   ["json", "json"],
+
   ["jsx", "jsx"],
+
   ["markdown", "md"],
+
   ["md", "md"],
+
   ["python", "py"],
+
   ["py", "py"],
+
   ["shell", "sh"],
+
   ["sh", "sh"],
+
   ["typescript", "ts"],
+
   ["ts", "ts"],
+
   ["tsx", "tsx"],
+
 ]);
 
 function isoTimestamp(): string {
+
   return new Date().toISOString();
+
 }
 
 function fileTimestamp(value: string): string {
+
   return value.replace(/[:.]/g, "-");
+
 }
 
 function titleFromPrompt(prompt: string): string {
+
   const normalized: string = prompt.replace(/\s+/g, " ").trim();
+
   return normalized.length > 54 ? `${normalized.slice(0, 54).trim()}...` : normalized || DEFAULT_TITLE;
+
 }
 
 function isPathHint(value: string): boolean {
-  return value.includes("/") || value.includes("\\") || /\.[A-Za-z0-9]+$/.test(value);
+
+  return value.includes("/") || value.includes("\\\\") || /\\.[A-Za-z0-9]+$/.test(value);
+
 }
 
 function extensionForLanguage(language: string | undefined): string {
+
   if (language === undefined) {
+
     return "txt";
+
   }
 
   return LANGUAGE_EXTENSIONS.get(language.toLowerCase()) ?? "txt";
+
 }
 
 function assertSafeRelativePath(path: string): void {
+
   const normalized: string = normalize(path);
-  const pathSegments: string[] = path.replace(/\\/g, "/").split("/");
+
+  const pathSegments: string[] = path.replace(/\\\\/g, "/").split("/");
 
   if (
+
     path.trim() === "" ||
+
     isAbsolute(path) ||
+
     pathSegments.includes("..") ||
+
     normalized === ".." ||
+
     normalized.startsWith(`..${sep}`) ||
+
     normalized.includes(`${sep}..${sep}`)
+
   ) {
+
     throw new Error(`Unsafe archive path: ${path}`);
+
   }
+
 }
 
 function safeResourcePath(chunk: OutputCodeChunk, ordinal: number, index: number): string {
+
   const rawPath: string =
+
     chunk.path ?? `${String(ordinal).padStart(3, "0")}-assistant__${String(index).padStart(3, "0")}.${extensionForLanguage(chunk.language)}`;
-  const normalizedPath: string = normalize(rawPath.replace(/\\/g, "/"));
+
+  const normalizedPath: string = normalize(rawPath.replace(/\\\\/g, "/"));
 
   assertSafeRelativePath(normalizedPath);
+
   return normalizedPath.split(sep).join(posix.sep);
+
 }
 
 function formatFrontmatter(metadata: Metadata, body: string): string {
+
   const lines: string[] = [FRONTMATTER_DELIMITER];
 
   for (const [key, value] of Object.entries(metadata)) {
+
     if (value === undefined) {
+
       continue;
+
     }
 
     if (Array.isArray(value)) {
+
       lines.push(`${key}:`);
+
       for (const item of value) {
+
         lines.push(`  - ${JSON.stringify(item)}`);
+
       }
+
       continue;
+
     }
 
     lines.push(`${key}: ${JSON.stringify(value)}`);
+
   }
 
   lines.push(FRONTMATTER_DELIMITER, body);
+
   return `${lines.join("\n")}\n`;
+
 }
 
 function parseMetadataValue(value: string): string {
+
   const trimmed: string = value.trim();
 
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+
     try {
+
       const parsed: unknown = JSON.parse(trimmed);
 
       if (typeof parsed === "string") {
+
         return parsed;
+
       }
+
     } catch {
+
       // Keep accepting archives written by the previous permissive serializer.
+
     }
+
   }
 
   return value;
+
 }
 
 function parseFrontmatter(fileContent: string): { metadata: Metadata; body: string } | undefined {
+
   const normalized: string = fileContent.replace(/\r\n/g, "\n");
 
   if (!normalized.startsWith(`${FRONTMATTER_DELIMITER}\n`)) {
+
     return undefined;
+
   }
 
   const endIndex: number = normalized.indexOf(`\n${FRONTMATTER_DELIMITER}\n`, FRONTMATTER_DELIMITER.length + 1);
 
   if (endIndex === -1) {
+
     return undefined;
+
   }
 
   const frontmatter: string = normalized.slice(FRONTMATTER_DELIMITER.length + 1, endIndex);
+
   const body: string = normalized.slice(endIndex + FRONTMATTER_DELIMITER.length + 2);
+
   const metadata: Metadata = {};
+
   let arrayKey: string | undefined;
 
   for (const line of frontmatter.split("\n")) {
+
     if (line.trim() === "") {
+
       continue;
+
     }
 
     const arrayItem: RegExpMatchArray | null = line.match(/^\s+-\s*(.*)$/);
 
     if (arrayItem !== null && arrayKey !== undefined) {
+
       const storedValue: string | string[] | undefined = metadata[arrayKey];
+
       const value: string[] = Array.isArray(storedValue) ? storedValue : [];
+
       value.push(parseMetadataValue(arrayItem[1]));
+
       metadata[arrayKey] = value;
+
       continue;
+
     }
 
     const keyValue: RegExpMatchArray | null = line.match(/^([^:]+):\s*(.*)$/);
 
     if (keyValue === null) {
+
       continue;
+
     }
 
     arrayKey = keyValue[1].trim();
+
     metadata[arrayKey] = keyValue[2] === "" ? [] : parseMetadataValue(keyValue[2]);
+
   }
 
   return { metadata, body: body.replace(/\n$/, "") };
+
 }
 
 function asString(value: string | string[] | undefined): string | undefined {
+
   return typeof value === "string" ? value : undefined;
+
 }
 
 function asArray(value: string | string[] | undefined): string[] {
+
   return Array.isArray(value) ? value : [];
+
+}
+
+function parseAttachments(
+  values: string[],
+): ChatAttachment[] {
+  const attachments: ChatAttachment[] = [];
+
+  for (const value of values) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        !("name" in parsed) ||
+        !("mimeType" in parsed) ||
+        !("path" in parsed)
+      ) {
+        continue;
+      }
+
+      const attachment =
+        parsed as Record<string, unknown>;
+
+      if (
+        typeof attachment.name !== "string" ||
+        typeof attachment.mimeType !== "string" ||
+        typeof attachment.path !== "string"
+      ) {
+        continue;
+      }
+
+      attachments.push({
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        path: attachment.path,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return attachments;
 }
 
 function messageFileName(ordinal: number, role: ChatRole): string {
+
   return `${String(ordinal).padStart(3, "0")}-${role}${MARKDOWN_EXTENSION}`;
+
 }
 
 function messageNoteName(ordinal: number, role: ChatRole): string {
+
   return messageFileName(ordinal, role).slice(0, -MARKDOWN_EXTENSION.length);
+
 }
 
 function wikilink(path: string): string {
+
   return `[[${path}]]`;
+
 }
 
 function resourceMetaPath(path: string): string {
+
   return `${path}${META_EXTENSION}`;
+
 }
 
 export class ChatArchiveService {
+
   public constructor(private readonly directory: string) {}
 
   public async initialize(): Promise<void> {
+
     const locations: StoredChatLocation[] = await this.findChatLocations();
 
     await Promise.all(
+
       locations.map((location: StoredChatLocation) =>
+
         this.writeChatMetadata(location.directory, location.summary),
+
       ),
+
     );
+
   }
 
   public async listChats(): Promise<ChatSummary[]> {
+
     const locations: StoredChatLocation[] = await this.findChatLocations();
+
     return locations
+
       .map((location: StoredChatLocation) => location.summary)
+
       .sort((left: ChatSummary, right: ChatSummary) => right.updatedAt.localeCompare(left.updatedAt));
+
   }
 
   public async createChat(title: string = DEFAULT_TITLE): Promise<ChatDetail> {
+
     const createdAt: string = isoTimestamp();
+
     const id: string = randomUUID();
+
     const date: string = createdAt.slice(0, 10);
+
     const chatDirectory: string = join(this.directory, date, `${fileTimestamp(createdAt)}_${id.slice(0, 8)}`);
 
     await mkdir(join(chatDirectory, "messages"), { recursive: true });
+
     await mkdir(join(chatDirectory, "resources"), { recursive: true });
+
     await this.writeChatMetadata(chatDirectory, {
+
       id,
+
       title: title.trim() || DEFAULT_TITLE,
+
       date,
+
       createdAt,
+
       updatedAt: createdAt,
+
     });
 
     return this.loadChat(id);
+
   }
 
   public async loadChat(chatId: string): Promise<ChatDetail> {
+
     const location: StoredChatLocation | undefined = await this.findChatLocation(chatId);
 
     if (location === undefined) {
+
       throw new Error("Chat not found");
+
     }
 
     const messages: ChatMessage[] = await this.readMessages(join(location.directory, "messages"));
+
     const resources: ChatResource[] = await this.readResources(join(location.directory, "resources"));
 
     return {
+
       ...location.summary,
+
       messages,
+
       resources,
+
     };
+
   }
 
   public async renameChat(chatId: string, title: string): Promise<ChatDetail> {
+
     const location: StoredChatLocation | undefined = await this.findChatLocation(chatId);
 
     if (location === undefined) {
+
       throw new Error("Chat not found");
+
     }
 
     const updatedSummary: ChatSummary = {
+
       ...location.summary,
+
       title: title.trim() || DEFAULT_TITLE,
+
       updatedAt: isoTimestamp(),
+
     };
 
     await this.writeChatMetadata(location.directory, updatedSummary);
+
     return this.loadChat(chatId);
+
   }
 
   public async saveThreadId(chatId: string, codexThreadId: string): Promise<void> {
+
+
     const location = await this.findChatLocation(chatId);
+
     if (location === undefined) {
+
       throw new Error("Chat not found");
+
     }
+
+
     await this.writeChatMetadata(location.directory, { ...location.summary, codexThreadId });
+
   }
+
+public async getAttachmentPath(
+  chatId: string,
+  attachmentName: string,
+): Promise<string> {
+  const location: StoredChatLocation | undefined =
+    await this.findChatLocation(chatId);
+
+  if (location === undefined) {
+    throw new Error("Chat not found");
+  }
+
+  if (
+    attachmentName.trim() === "" ||
+    attachmentName.includes("/") ||
+    attachmentName.includes("\\") ||
+    attachmentName === "." ||
+    attachmentName === ".."
+  ) {
+    throw new Error("Attachment not found");
+  }
+
+  const attachmentsDirectory: string =
+    join(location.directory, "attachments");
+
+  let attachmentExists = false;
+
+  try {
+    const entries = await readdir(
+      attachmentsDirectory,
+      { withFileTypes: true },
+    );
+
+    attachmentExists = entries.some(
+      (entry) =>
+        entry.isFile() &&
+        entry.name === attachmentName,
+    );
+  } catch {
+    attachmentExists = false;
+  }
+
+  if (!attachmentExists) {
+    throw new Error("Attachment not found");
+  }
+
+  return join(
+    attachmentsDirectory,
+    attachmentName,
+  );
+}
 
   public async appendExchange(chatId: string, prompt: string, finalResponse: string): Promise<ChatDetail> {
+
     await this.appendMessage(chatId, "user", prompt);
+
     return this.appendMessage(chatId, "assistant", finalResponse);
+
   }
 
-  public async appendMessage(chatId: string, role: ChatRole, content: string): Promise<ChatDetail> {
-    const location: StoredChatLocation | undefined = await this.findChatLocation(chatId);
+  public async appendMessage(
+    chatId: string,
+    role: ChatRole,
+    content: string,
+    attachment?: IncomingAttachment,
+  ): Promise<ChatDetail> {
+    const location: StoredChatLocation | undefined =
+      await this.findChatLocation(chatId);
 
     if (location === undefined) {
       throw new Error("Chat not found");
@@ -297,27 +582,55 @@ export class ChatArchiveService {
 
     const messagesDirectory: string = join(location.directory, "messages");
     const resourcesDirectory: string = join(location.directory, "resources");
+    const attachmentsDirectory: string = join(location.directory, "attachments");
     const existingMessages: ChatMessage[] = await this.readMessages(messagesDirectory);
     const ordinal: number = existingMessages.length + 1;
+
     const message: ChatMessage = {
       id: randomUUID(),
       role,
       content,
       createdAt: isoTimestamp(),
       resources: [],
+      attachments: [],
     };
+
+    if (attachment !== undefined) {
+      await mkdir(attachmentsDirectory, { recursive: true });
+
+      const extension: string = extname(attachment.originalName);
+      const storedFileName: string = `${randomUUID()}${extension}`;
+      const storedPath: string = join(attachmentsDirectory, storedFileName);
+
+      /*
+       * Copy instead of moving the multer temporary file.
+       * The route still needs the temporary path when it sends an image to Codex.
+       */
+      await copyFile(attachment.temporaryPath, storedPath);
+
+      message.attachments.push({
+        name: attachment.originalName,
+        mimeType: attachment.mimeType,
+        path: storedFileName,
+      });
+    }
 
     if (role === "assistant") {
       message.resources = await this.writeResources(resourcesDirectory, ordinal, message);
     }
 
     const previousMessage: ChatMessage | undefined = existingMessages.at(-1);
+
     await this.writeMessage(messagesDirectory, ordinal, message, previousMessage);
+
     await this.writeChatMetadata(location.directory, {
       ...location.summary,
-      title: existingMessages.length === 0 && role === "user" && location.summary.title === DEFAULT_TITLE
-        ? titleFromPrompt(content)
-        : location.summary.title,
+      title:
+        existingMessages.length === 0 &&
+        role === "user" &&
+        location.summary.title === DEFAULT_TITLE
+          ? titleFromPrompt(content)
+          : location.summary.title,
       updatedAt: isoTimestamp(),
     });
 
@@ -325,333 +638,551 @@ export class ChatArchiveService {
   }
 
   private async findChatLocations(): Promise<StoredChatLocation[]> {
+
     await mkdir(this.directory, { recursive: true });
 
     const locations: StoredChatLocation[] = [];
+
     const dateEntries = await readdir(this.directory, { withFileTypes: true });
 
     for (const dateEntry of dateEntries) {
+
       if (!dateEntry.isDirectory()) {
+
         continue;
+
       }
 
       const dateDirectory: string = join(this.directory, dateEntry.name);
+
       const chatEntries = await readdir(dateDirectory, { withFileTypes: true });
 
       for (const chatEntry of chatEntries) {
+
         if (!chatEntry.isDirectory()) {
+
           continue;
+
         }
 
         const chatDirectory: string = join(dateDirectory, chatEntry.name);
+
         const summary: ChatSummary | undefined = await this.readChatSummary(chatDirectory, dateEntry.name);
 
         if (summary !== undefined) {
+
           locations.push({ directory: chatDirectory, summary });
+
         }
+
       }
+
     }
 
     return locations;
+
   }
 
   private async findChatLocation(chatId: string): Promise<StoredChatLocation | undefined> {
+
     const locations: StoredChatLocation[] = await this.findChatLocations();
+
     return locations.find((location: StoredChatLocation) => location.summary.id === chatId);
+
   }
 
   private async readChatSummary(chatDirectory: string, date: string): Promise<ChatSummary | undefined> {
+
     try {
+
       const content: string = await readFile(join(chatDirectory, "chat.md"), UTF8_ENCODING);
+
       const parsed = parseFrontmatter(content);
 
       if (parsed === undefined) {
+
         return undefined;
+
       }
 
       const id: string | undefined = asString(parsed.metadata.id);
+
       const title: string | undefined = asString(parsed.metadata.title);
+
       const createdAt: string | undefined = asString(parsed.metadata.createdAt);
+
       const updatedAt: string | undefined = asString(parsed.metadata.updatedAt);
 
       if (id === undefined || title === undefined || createdAt === undefined || updatedAt === undefined) {
+
         return undefined;
+
       }
 
       const codexThreadId = asString(parsed.metadata.codexThreadId);
+
       return { id, title, date, createdAt, updatedAt, codexThreadId };
+
     } catch {
+
       return undefined;
+
     }
+
   }
 
   private async writeChatMetadata(chatDirectory: string, summary: ChatSummary): Promise<void> {
+
     await mkdir(chatDirectory, { recursive: true });
+
     const messageFiles: StoredMessageFile[] = await this.listMessageFiles(join(chatDirectory, "messages"));
+
     const messageLinks: string[] = messageFiles.map((message: StoredMessageFile) =>
+
       wikilink(`messages/${message.name.slice(0, -MARKDOWN_EXTENSION.length)}`),
+
     );
+
     const bodyLines: string[] = [`# ${summary.title}`];
 
     if (messageFiles.length > 0) {
+
       bodyLines.push(
+
         "",
+
         "## Messages",
+
         "",
+
         ...messageFiles.map(
+
           (message: StoredMessageFile) =>
-            `- [${String(message.ordinal).padStart(3, "0")} · ${message.role}](messages/${message.name})`,
+
+            `- [${String(message.ordinal).padStart(3, "0")} · ${message.role}]\(messages/${message.name})`,
+
         ),
+
       );
+
     }
 
     await writeFile(
+
       join(chatDirectory, "chat.md"),
+
       formatFrontmatter(
+
         {
+
           id: summary.id,
+
           codexThreadId: summary.codexThreadId,
+
           title: summary.title,
+
           date: summary.date,
+
           createdAt: summary.createdAt,
+
           updatedAt: summary.updatedAt,
+
           messages: messageLinks,
+
         },
+
         bodyLines.join("\n"),
+
       ),
+
       { encoding: UTF8_ENCODING },
+
     );
+
   }
 
   private async listMessageFiles(messagesDirectory: string): Promise<StoredMessageFile[]> {
+
     try {
+
       const entries = await readdir(messagesDirectory, { withFileTypes: true });
+
       const messages: StoredMessageFile[] = [];
 
       for (const entry of entries) {
+
         if (!entry.isFile()) {
+
           continue;
+
         }
 
-        const match: RegExpMatchArray | null = entry.name.match(/^(\d+)-(user|assistant)\.md$/);
+        const match: RegExpMatchArray | null = entry.name.match(/^(\d+)-(user|assistant)\\.md$/);
 
         if (match === null) {
+
           continue;
+
         }
 
         messages.push({
+
           name: entry.name,
+
           ordinal: Number(match[1]),
+
           role: match[2] as ChatRole,
+
         });
+
       }
 
       return messages.sort((left: StoredMessageFile, right: StoredMessageFile) => left.ordinal - right.ordinal);
+
     } catch {
+
       return [];
+
     }
+
   }
 
   private async readMessages(messagesDirectory: string): Promise<ChatMessage[]> {
+
     try {
+
       const entries = (await readdir(messagesDirectory, { withFileTypes: true })).sort((left, right) =>
+
         left.name.localeCompare(right.name),
+
       );
+
       const messages: ChatMessage[] = [];
 
       for (const entry of entries) {
+
         if (!entry.isFile() || !entry.name.endsWith(MARKDOWN_EXTENSION)) {
+
           continue;
+
         }
 
         const content: string = await readFile(join(messagesDirectory, entry.name), UTF8_ENCODING);
+
         const parsed = parseFrontmatter(content);
 
         if (parsed === undefined) {
+
           continue;
+
         }
 
         const id: string | undefined = asString(parsed.metadata.id);
+
         const role: string | undefined = asString(parsed.metadata.role);
+
         const createdAt: string | undefined = asString(parsed.metadata.createdAt);
 
         if (id === undefined || (role !== "user" && role !== "assistant") || createdAt === undefined) {
+
           continue;
+
         }
 
         messages.push({
-          id,
-          role,
-          createdAt,
-          content: parsed.body,
-          resources: asArray(parsed.metadata.resources),
-        });
+  id,
+  role,
+  createdAt,
+  content: parsed.body,
+  resources: asArray(parsed.metadata.resources),
+  attachments: parseAttachments(
+    asArray(parsed.metadata.attachments),
+  ),
+});
+
       }
 
       return messages;
+
     } catch {
+
       return [];
+
     }
+
   }
 
   private async writeMessage(
+
     messagesDirectory: string,
+
     ordinal: number,
+
     message: ChatMessage,
+
     previousMessage: ChatMessage | undefined,
+
   ): Promise<void> {
+
     await mkdir(messagesDirectory, { recursive: true });
+
     const resourceNotes: string[] = message.resources.map((resourcePath: string) =>
+
       wikilink(`${resourcePath}${META_EXTENSION.slice(0, -MARKDOWN_EXTENSION.length)}`),
+
     );
+
     await writeFile(
+
       join(messagesDirectory, messageFileName(ordinal, message.role)),
+
       formatFrontmatter(
+
         {
+
           id: message.id,
+
           role: message.role,
+
           createdAt: message.createdAt,
+
           ordinal: String(ordinal),
+
           chat: wikilink("../chat"),
+
           previous: previousMessage === undefined
+
             ? undefined
+
             : wikilink(messageNoteName(ordinal - 1, previousMessage.role)),
+
           resources: message.resources,
-          resourceNotes,
+resourceNotes,
+attachments: message.attachments.map(
+  (attachment: ChatAttachment) =>
+    JSON.stringify(attachment),
+),
+
         },
+
         message.content,
+
       ),
+
       { encoding: UTF8_ENCODING },
+
     );
+
   }
 
   private async readResources(resourcesDirectory: string): Promise<ChatResource[]> {
+
     const files: string[] = await this.walkFiles(resourcesDirectory);
+
     const resources: ChatResource[] = [];
 
     for (const file of files) {
+
       if (file.endsWith(META_EXTENSION)) {
+
         continue;
+
       }
 
       const metaFile: string = resourceMetaPath(file);
 
       try {
+
         const metaContent: string = await readFile(join(resourcesDirectory, metaFile), UTF8_ENCODING);
+
         const parsed = parseFrontmatter(metaContent);
 
         if (parsed === undefined) {
+
           continue;
+
         }
 
         const id: string | undefined = asString(parsed.metadata.id);
+
         const messageId: string | undefined = asString(parsed.metadata.messageId);
+
         const createdAt: string | undefined = asString(parsed.metadata.createdAt);
+
         const language: string | undefined = asString(parsed.metadata.language);
 
         if (id === undefined || messageId === undefined || createdAt === undefined) {
+
           continue;
+
         }
 
         resources.push({
+
           id,
+
           messageId,
+
           createdAt,
+
           language,
+
           path: file,
+
           content: await readFile(join(resourcesDirectory, file), UTF8_ENCODING),
+
         });
+
       } catch {
+
         continue;
+
       }
+
     }
 
     return resources.sort((left: ChatResource, right: ChatResource) => left.path.localeCompare(right.path));
+
   }
 
   private async writeResources(
+
     resourcesDirectory: string,
+
     assistantOrdinal: number,
+
     message: ChatMessage,
+
   ): Promise<string[]> {
+
     const chunks: OutputCodeChunk[] = extractOutputCodeChunks(message.content);
+
     const resourceLinks: string[] = [];
+
     const usedPaths: Set<string> = new Set(await this.walkFiles(resourcesDirectory));
 
     await mkdir(resourcesDirectory, { recursive: true });
 
     for (let index: number = 0; index < chunks.length; index += 1) {
+
       const chunk: OutputCodeChunk = chunks[index];
+
       const content: string = chunk.content.trimEnd();
 
       if (content.trim() === "") {
+
         continue;
+
       }
 
       let resourcePath: string = safeResourcePath(chunk, assistantOrdinal, index + 1);
+
       const extension: string = resourcePath.includes(".") ? resourcePath.split(".").pop() ?? "txt" : "txt";
+
       const basePath: string = resourcePath.slice(0, -(extension.length + 1));
+
       let duplicateIndex = 2;
 
       while (usedPaths.has(resourcePath)) {
+
         resourcePath = `${basePath}-${duplicateIndex}.${extension}`;
+
         duplicateIndex += 1;
+
       }
 
       usedPaths.add(resourcePath);
+
       const absolutePath: string = join(resourcesDirectory, resourcePath);
+
       const relativeToRoot: string = relative(resourcesDirectory, absolutePath);
 
       assertSafeRelativePath(relativeToRoot);
+
       await mkdir(dirname(absolutePath), { recursive: true });
+
       await writeFile(absolutePath, content, { encoding: UTF8_ENCODING });
 
       const metaPath: string = join(resourcesDirectory, resourceMetaPath(resourcePath));
+
       await mkdir(dirname(metaPath), { recursive: true });
+
       await writeFile(
+
         metaPath,
+
         formatFrontmatter(
+
           {
+
             id: randomUUID(),
+
             messageId: message.id,
+
             language: chunk.language,
+
             path: resourcePath,
+
             createdAt: isoTimestamp(),
+
             message: wikilink(`../messages/${messageNoteName(assistantOrdinal, "assistant")}`),
+
           },
-          `[Message](../messages/${messageFileName(assistantOrdinal, "assistant")})`,
+
+          `[Message]\(../messages/${messageFileName(assistantOrdinal, "assistant")})`,
+
         ),
+
         { encoding: UTF8_ENCODING },
+
       );
+
       resourceLinks.push(`../resources/${resourcePath}`);
+
     }
 
     return resourceLinks;
+
   }
 
   private async walkFiles(rootDirectory: string, currentDirectory: string = rootDirectory): Promise<string[]> {
+
     try {
+
       const entries = await readdir(currentDirectory, { withFileTypes: true });
+
       const files: string[] = [];
 
       for (const entry of entries) {
+
         const absolutePath: string = join(currentDirectory, entry.name);
 
         if (entry.isDirectory()) {
+
           files.push(...(await this.walkFiles(rootDirectory, absolutePath)));
+
           continue;
+
         }
 
         if (!entry.isFile()) {
+
           continue;
+
         }
 
         files.push(relative(rootDirectory, absolutePath).split(sep).join(posix.sep));
+
       }
 
       return files;
+
     } catch {
+
       return [];
+
     }
+
   }
+
 }
