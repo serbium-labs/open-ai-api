@@ -101,7 +101,8 @@ textarea {
 }
 
 .chat-history-new-button,
-.chat-history-rename-button {
+.chat-history-rename-button,
+.chat-history-delete-button {
   display: inline-grid;
   place-items: center;
   position: relative;
@@ -116,14 +117,16 @@ textarea {
 }
 
 .chat-history-new-button svg,
-.chat-history-rename-button svg {
+.chat-history-rename-button svg,
+.chat-history-delete-button svg {
   width: 17px;
   height: 17px;
   fill: currentColor;
 }
 
 .chat-history-new-button:hover:not(:disabled),
-.chat-history-rename-button:hover:not(:disabled) {
+.chat-history-rename-button:hover:not(:disabled),
+.chat-history-delete-button:hover:not(:disabled) {
   background: var(--color-surface-muted-hover);
   color: var(--color-text);
 }
@@ -151,7 +154,7 @@ textarea {
 
 .chat-history-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 4px;
   border-radius: 10px;
@@ -219,18 +222,22 @@ textarea {
   font-size: 11px;
 }
 
-.chat-history-rename-button {
+.chat-history-rename-button,
+.chat-history-delete-button {
   width: 30px;
   height: 30px;
   opacity: 0.58;
 }
 
 .chat-history-item:hover .chat-history-rename-button,
-.chat-history-rename-button:focus-visible {
+.chat-history-rename-button:focus-visible,
+.chat-history-item:hover .chat-history-delete-button,
+.chat-history-delete-button:focus-visible {
   opacity: 1;
 }
 
-.chat-history-rename-button:disabled {
+.chat-history-rename-button:disabled,
+.chat-history-delete-button:disabled {
   cursor: not-allowed;
   opacity: 0.34;
 }
@@ -873,7 +880,8 @@ pre code {
 .chat-history-toggle::after,
 .resources-toggle::after,
 .chat-history-new-button::after,
-.chat-history-rename-button::after {
+.chat-history-rename-button::after,
+.chat-history-delete-button::after {
   position: absolute;
   z-index: 30;
   bottom: calc(100% + 9px);
@@ -913,7 +921,8 @@ pre code {
 .chat-history-toggle::before,
 .resources-toggle::before,
 .chat-history-new-button::before,
-.chat-history-rename-button::before {
+.chat-history-rename-button::before,
+.chat-history-delete-button::before {
   position: absolute;
   z-index: 30;
   bottom: calc(100% + 3px);
@@ -947,7 +956,8 @@ pre code {
 }
 
 .chat-history-new-button::after,
-.chat-history-rename-button::after {
+.chat-history-rename-button::after,
+.chat-history-delete-button::after {
   top: calc(100% + 9px);
   right: 0;
   bottom: auto;
@@ -956,7 +966,8 @@ pre code {
 }
 
 .chat-history-new-button::before,
-.chat-history-rename-button::before {
+.chat-history-rename-button::before,
+.chat-history-delete-button::before {
   top: calc(100% + 3px);
   right: 10px;
   bottom: auto;
@@ -981,7 +992,11 @@ pre code {
 .chat-history-rename-button:hover::after,
 .chat-history-rename-button:hover::before,
 .chat-history-rename-button:focus-visible::after,
-.chat-history-rename-button:focus-visible::before {
+.chat-history-rename-button:focus-visible::before,
+.chat-history-delete-button:hover::after,
+.chat-history-delete-button:hover::before,
+.chat-history-delete-button:focus-visible::after,
+.chat-history-delete-button:focus-visible::before {
   opacity: 1;
   transform: translate(-50%, 0);
 }
@@ -993,7 +1008,11 @@ pre code {
 .chat-history-rename-button:hover::after,
 .chat-history-rename-button:hover::before,
 .chat-history-rename-button:focus-visible::after,
-.chat-history-rename-button:focus-visible::before {
+.chat-history-rename-button:focus-visible::before,
+.chat-history-delete-button:hover::after,
+.chat-history-delete-button:hover::before,
+.chat-history-delete-button:focus-visible::after,
+.chat-history-delete-button:focus-visible::before {
   transform: translateY(0);
 }
 

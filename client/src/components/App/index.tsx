@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-import { createChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
+import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
   appendPromptTurn,
   ChatTranscript,
@@ -70,6 +70,8 @@ export function App(): ReactElement {
   const [isChatHistoryOpen, setIsChatHistoryOpen] = useState<boolean>(true);
   const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
   const [chatListStatus, setChatListStatus] = useState<string>("");
+  const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
+  const isBusy: boolean = isRunning || deletingChatId !== undefined;
 
   useEffect(() => {
     let isMounted: boolean = true;
@@ -114,7 +116,7 @@ export function App(): ReactElement {
   }, []);
 
   async function openChat(chatId: string): Promise<void> {
-    if (isRunning || chatId === currentChatId) {
+    if (isBusy || chatId === currentChatId) {
       return;
     }
 
@@ -129,7 +131,7 @@ export function App(): ReactElement {
   }
 
   function handleNewChat(): void {
-    if (messages.length === 0 || isRunning) {
+    if (messages.length === 0 || isBusy) {
       return;
     }
 
@@ -141,7 +143,7 @@ export function App(): ReactElement {
   }
 
   async function handleRenameChat(chat: ChatSummary): Promise<void> {
-    if (isRunning) {
+    if (isBusy) {
       return;
     }
 
@@ -153,6 +155,34 @@ export function App(): ReactElement {
 
     const renamedChat: ChatDetail = await renameChat(chat.id, title.trim());
     setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(renamedChat, summaries));
+  }
+
+  async function handleDeleteChat(chat: ChatSummary): Promise<void> {
+    if (isBusy || !window.confirm(UI_TEXT.deleteChatConfirmation)) {
+      return;
+    }
+
+    setDeletingChatId(chat.id);
+    setChatListStatus("");
+
+    try {
+      await deleteChat(chat.id);
+      setChatSummaries((summaries: ChatSummary[]) =>
+        summaries.filter((summary: ChatSummary) => summary.id !== chat.id),
+      );
+
+      if (chat.id === currentChatId) {
+        setCurrentChatId(undefined);
+        setMessages([]);
+        setFiles([]);
+        setCodeStatus(UI_TEXT.emptyCode);
+        setPrompt("");
+      }
+    } catch (error: unknown) {
+      setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
+    } finally {
+      setDeletingChatId(undefined);
+    }
   }
 
   async function handleSubmit(submittedPrompt: string): Promise<void> {
@@ -218,7 +248,7 @@ export function App(): ReactElement {
             <button
               className="chat-history-new-button"
               type="button"
-              disabled={messages.length === 0 || isRunning}
+              disabled={messages.length === 0 || isBusy}
               aria-label={UI_TEXT.newChatButton}
               data-tooltip={messages.length === 0 ? UI_TEXT.emptyChatTooltip : UI_TEXT.newChatButton}
               onClick={handleNewChat}
@@ -233,14 +263,14 @@ export function App(): ReactElement {
             {chatSummaries.map((chat: ChatSummary) => (
               <div
                 className={`chat-history-item${chat.id === currentChatId ? " chat-history-item-active" : ""}${
-                  isRunning && chat.id !== currentChatId ? " chat-history-item-locked" : ""
+                  isBusy && chat.id !== currentChatId ? " chat-history-item-locked" : ""
                 }`}
                 key={chat.id}
               >
                 <button
                   className="chat-history-open-button"
                   type="button"
-                  disabled={isRunning && chat.id !== currentChatId}
+                  disabled={isBusy && chat.id !== currentChatId}
                   aria-current={chat.id === currentChatId ? "page" : undefined}
                   onClick={() => {
                     void openChat(chat.id);
@@ -252,7 +282,7 @@ export function App(): ReactElement {
                 <button
                   className="chat-history-rename-button"
                   type="button"
-                  disabled={isRunning}
+                  disabled={isBusy}
                   aria-label={UI_TEXT.renameChatButton}
                   data-tooltip={UI_TEXT.renameChatButton}
                   onClick={() => {
@@ -261,6 +291,20 @@ export function App(): ReactElement {
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
                     <path d="m4 16.6-.7 4.1 4.1-.7L18.7 8.7l-3.4-3.4L4 16.6Zm13.2-12.7 3 3 .8-.8a2.1 2.1 0 0 0-3-3l-.8.8Z" />
+                  </svg>
+                </button>
+                <button
+                  className="chat-history-delete-button"
+                  type="button"
+                  disabled={isBusy}
+                  aria-label={UI_TEXT.deleteChatButton}
+                  data-tooltip={UI_TEXT.deleteChatButton}
+                  onClick={() => {
+                    void handleDeleteChat(chat);
+                  }}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                    <path d="M8 4h8l1 2h4v2H3V6h4l1-2Zm1 6h2v8H9v-8Zm4 0h2v8h-2v-8ZM6 10h2v8h8v-8h2v9a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-9Z" />
                   </svg>
                 </button>
               </div>
@@ -295,7 +339,7 @@ export function App(): ReactElement {
             <ChatTranscript messages={messages} />
             <PromptForm
               prompt={prompt}
-              isRunning={isRunning}
+              isRunning={isBusy}
               onPromptChange={setPrompt}
               onSubmit={(submittedPrompt: string) => {
                 void handleSubmit(submittedPrompt);
