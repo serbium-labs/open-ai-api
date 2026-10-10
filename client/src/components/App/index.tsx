@@ -15,8 +15,10 @@ import type { ChatDetail, ChatSummary, CodeFile, PersistedChatMessage } from "@m
 
 import {
   createInitialSidebarState,
+  loadSidebarPreferences,
   MOBILE_MEDIA_QUERY,
   reduceSidebarState,
+  saveSidebarPreferences,
 } from "./sidebarState";
 
 function getCodeStatus(files: CodeFile[]): string {
@@ -65,6 +67,14 @@ function isMobileViewport(): boolean {
   return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
 }
 
+function getLocalStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 export function App(): ReactElement {
   const [prompt, setPrompt] = useState<string>("");
   const [files, setFiles] = useState<CodeFile[]>([]);
@@ -76,7 +86,7 @@ export function App(): ReactElement {
   const [sidebarState, dispatchSidebarAction] = useReducer(
     reduceSidebarState,
     undefined,
-    () => createInitialSidebarState(isMobileViewport()),
+    () => createInitialSidebarState(isMobileViewport(), loadSidebarPreferences(getLocalStorage())),
   );
   const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
   const [chatListStatus, setChatListStatus] = useState<string>("");
@@ -96,6 +106,10 @@ export function App(): ReactElement {
       mobileMediaQuery.removeEventListener("change", handleViewportChange);
     };
   }, []);
+
+  useEffect(() => {
+    saveSidebarPreferences(getLocalStorage(), sidebarState.preferences);
+  }, [sidebarState.preferences]);
 
   useEffect(() => {
     let isMounted: boolean = true;
