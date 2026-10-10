@@ -882,19 +882,19 @@ pre code {
   position: relative;
 }
 
-.send-button::after,
-.copy-button::after,
-.chat-history-toggle::after,
-.resources-toggle::after,
-.chat-history-new-button::after,
-.chat-history-rename-button::after,
-.chat-history-delete-button::after {
+:is(
+  .send-button,
+  .copy-button,
+  .chat-history-toggle,
+  .resources-toggle,
+  .chat-history-new-button,
+  .chat-history-rename-button,
+  .chat-history-delete-button
+)::after {
   position: absolute;
   z-index: 30;
-  bottom: calc(100% + 9px);
-  left: 50%;
   width: max-content;
-  max-width: 220px;
+  max-width: min(220px, calc(100vw - 24px));
   border-radius: 8px;
   padding: 7px 9px;
   background: var(--color-tooltip);
@@ -904,153 +904,132 @@ pre code {
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: var(--tooltip-hidden-transform);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.chat-history-toggle::after {
-  top: 50%;
-  bottom: auto;
-  left: calc(100% + 10px);
-  transform: translate(-4px, -50%);
-}
-
-.resources-toggle::after {
-  top: 50%;
-  right: calc(100% + 10px);
-  bottom: auto;
-  left: auto;
-  transform: translate(4px, -50%);
-}
-
-.send-button::before,
-.copy-button::before,
-.chat-history-toggle::before,
-.resources-toggle::before,
-.chat-history-new-button::before,
-.chat-history-rename-button::before,
-.chat-history-delete-button::before {
+:is(
+  .send-button,
+  .copy-button,
+  .chat-history-toggle,
+  .resources-toggle,
+  .chat-history-new-button,
+  .chat-history-rename-button,
+  .chat-history-delete-button
+)::before {
   position: absolute;
   z-index: 30;
-  bottom: calc(100% + 3px);
-  left: 50%;
   border: 6px solid transparent;
-  border-top-color: var(--color-tooltip);
   content: "";
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: var(--tooltip-hidden-transform);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.chat-history-toggle::before {
-  top: 50%;
-  bottom: auto;
-  left: calc(100% - 1px);
-  border-color: transparent;
-  border-right-color: var(--color-tooltip);
-  transform: translate(-4px, -50%);
+.send-button,
+.copy-button {
+  --tooltip-hidden-transform: translate(-50%, 4px);
+  --tooltip-visible-transform: translate(-50%, 0);
 }
 
-.resources-toggle::before {
+.send-button::after,
+.copy-button::after {
+  bottom: calc(100% + 9px);
+  left: 50%;
+}
+
+.send-button::before,
+.copy-button::before {
+  bottom: calc(100% + 3px);
+  left: 50%;
+  border-top-color: var(--color-tooltip);
+}
+
+.chat-history-toggle:not(.chat-history-toggle-open) {
+  --tooltip-hidden-transform: translate(-4px, -50%);
+  --tooltip-visible-transform: translate(0, -50%);
+}
+
+.chat-history-toggle:not(.chat-history-toggle-open)::after {
+  top: 50%;
+  left: calc(100% + 10px);
+}
+
+.chat-history-toggle:not(.chat-history-toggle-open)::before {
+  top: 50%;
+  left: calc(100% - 1px);
+  border-right-color: var(--color-tooltip);
+}
+
+.resources-toggle,
+.chat-history-new-button,
+.chat-history-toggle-open {
+  --tooltip-hidden-transform: translate(4px, -50%);
+  --tooltip-visible-transform: translate(0, -50%);
+}
+
+.resources-toggle::after,
+.chat-history-new-button::after,
+.chat-history-toggle-open::after {
+  top: 50%;
+  right: calc(100% + 10px);
+}
+
+.resources-toggle::before,
+.chat-history-new-button::before,
+.chat-history-toggle-open::before {
   top: 50%;
   right: calc(100% - 1px);
-  bottom: auto;
-  left: auto;
-  border-color: transparent;
   border-left-color: var(--color-tooltip);
-  transform: translate(4px, -50%);
 }
 
-.chat-history-new-button::after,
+.chat-history-new-button::after {
+  max-width: calc(
+    var(--history-sidebar-width) - var(--sidebar-padding-inline) - var(--sidebar-padding-inline) - 60px
+  );
+  white-space: normal;
+}
+
+.chat-history-rename-button,
+.chat-history-delete-button {
+  --tooltip-hidden-transform: translateY(-4px);
+  --tooltip-visible-transform: translateY(0);
+}
+
 .chat-history-rename-button::after,
 .chat-history-delete-button::after {
   top: calc(100% + 9px);
   right: 0;
-  bottom: auto;
-  left: auto;
-  transform: translateY(-4px);
 }
 
-.chat-history-new-button::before,
 .chat-history-rename-button::before,
 .chat-history-delete-button::before {
   top: calc(100% + 3px);
   right: 10px;
-  bottom: auto;
-  left: auto;
-  border-color: transparent;
   border-bottom-color: var(--color-tooltip);
-  transform: translateY(-4px);
 }
 
-.chat-history-new-button::after {
-  top: 50%;
-  right: calc(100% + 10px);
-  bottom: auto;
-  left: auto;
-  transform: translate(4px, -50%);
-}
-
-.chat-history-new-button::before {
-  top: 50%;
-  right: calc(100% - 1px);
-  bottom: auto;
-  left: auto;
-  border-color: transparent;
-  border-left-color: var(--color-tooltip);
-  transform: translate(4px, -50%);
-}
-
-.send-button:hover::after,
-.send-button:hover::before,
-.send-button:focus-visible::after,
-.send-button:focus-visible::before,
-.copy-button:hover::after,
-.copy-button:hover::before,
-.copy-button:focus-visible::after,
-.copy-button:focus-visible::before,
-.chat-history-new-button:hover::after,
-.chat-history-new-button:hover::before,
-.chat-history-new-button:focus-visible::after,
-.chat-history-new-button:focus-visible::before,
-.chat-history-rename-button:hover::after,
-.chat-history-rename-button:hover::before,
-.chat-history-rename-button:focus-visible::after,
-.chat-history-rename-button:focus-visible::before,
-.chat-history-delete-button:hover::after,
-.chat-history-delete-button:hover::before,
-.chat-history-delete-button:focus-visible::after,
-.chat-history-delete-button:focus-visible::before {
+:is(
+  .send-button,
+  .copy-button,
+  .chat-history-toggle,
+  .resources-toggle,
+  .chat-history-new-button,
+  .chat-history-rename-button,
+  .chat-history-delete-button
+):is(:hover, :focus-visible)::before,
+:is(
+  .send-button,
+  .copy-button,
+  .chat-history-toggle,
+  .resources-toggle,
+  .chat-history-new-button,
+  .chat-history-rename-button,
+  .chat-history-delete-button
+):is(:hover, :focus-visible)::after {
   opacity: 1;
-  transform: translate(-50%, 0);
-}
-
-.chat-history-new-button:hover::after,
-.chat-history-new-button:hover::before,
-.chat-history-new-button:focus-visible::after,
-.chat-history-new-button:focus-visible::before,
-.chat-history-rename-button:hover::after,
-.chat-history-rename-button:hover::before,
-.chat-history-rename-button:focus-visible::after,
-.chat-history-rename-button:focus-visible::before,
-.chat-history-delete-button:hover::after,
-.chat-history-delete-button:hover::before,
-.chat-history-delete-button:focus-visible::after,
-.chat-history-delete-button:focus-visible::before {
-  transform: translateY(0);
-}
-
-.resources-toggle:hover::after,
-.resources-toggle:hover::before,
-.resources-toggle:focus-visible::after,
-.resources-toggle:focus-visible::before,
-.chat-history-toggle:hover::after,
-.chat-history-toggle:hover::before,
-.chat-history-toggle:focus-visible::after,
-.chat-history-toggle:focus-visible::before {
-  opacity: 1;
-  transform: translate(0, -50%);
+  transform: var(--tooltip-visible-transform);
 }
 
 .resources-sidebar {
@@ -1229,11 +1208,4 @@ pre code {
     max-width: 100%;
     font-size: 14px;
   }
-}
-
-.chat-history-new-button:hover::after,
-.chat-history-new-button:hover::before,
-.chat-history-new-button:focus-visible::after,
-.chat-history-new-button:focus-visible::before {
-  transform: translate(0, -50%);
 }
