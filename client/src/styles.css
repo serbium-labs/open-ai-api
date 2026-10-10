@@ -167,6 +167,10 @@ textarea {
   background: rgba(216, 216, 211, 0.28);
 }
 
+.chat-history-item:hover:not(.chat-history-item-locked) {
+  background: var(--color-surface-muted-hover);
+}
+
 .chat-history-open-button {
   display: grid;
   justify-items: start;
@@ -181,8 +185,9 @@ textarea {
 }
 
 .chat-history-open-button:hover:not(:disabled) {
-  background: var(--color-surface);
+  background: transparent;
   box-shadow: none;
+  transform: none;
 }
 
 .chat-history-open-button:disabled {
