@@ -131,6 +131,13 @@ textarea {
   color: var(--color-text);
 }
 
+.chat-history-new-button:hover:not(:disabled),
+.chat-history-new-button:focus-visible {
+  background: var(--color-text);
+  color: var(--color-text-inverse);
+  border-color: var(--color-text);
+}
+
 .chat-history-new-button:disabled {
   color: var(--color-text-muted);
   opacity: 1;
@@ -977,6 +984,24 @@ pre code {
   transform: translateY(-4px);
 }
 
+.chat-history-new-button::after {
+  top: 50%;
+  right: calc(100% + 10px);
+  bottom: auto;
+  left: auto;
+  transform: translate(4px, -50%);
+}
+
+.chat-history-new-button::before {
+  top: 50%;
+  right: calc(100% - 1px);
+  bottom: auto;
+  left: auto;
+  border-color: transparent;
+  border-left-color: var(--color-tooltip);
+  transform: translate(4px, -50%);
+}
+
 .send-button:hover::after,
 .send-button:hover::before,
 .send-button:focus-visible::after,
@@ -1204,4 +1229,11 @@ pre code {
     max-width: 100%;
     font-size: 14px;
   }
+}
+
+.chat-history-new-button:hover::after,
+.chat-history-new-button:hover::before,
+.chat-history-new-button:focus-visible::after,
+.chat-history-new-button:focus-visible::before {
+  transform: translate(0, -50%);
 }
