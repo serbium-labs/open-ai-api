@@ -564,7 +564,7 @@ button:disabled {
   border-radius: 18px;
   padding: 12px 14px;
   background: var(--color-surface);
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: background-color 240ms ease, border-color 240ms ease, box-shadow 240ms ease, transform 160ms ease;
 }
 
 .chat-message:hover .message-content {
@@ -586,6 +586,12 @@ button:disabled {
 .chat-message-error .message-content {
   border-color: var(--color-error-border);
   background: var(--color-error-surface);
+}
+
+.chat-message-resource-highlight .message-content {
+  border-color: var(--color-accent);
+  background: var(--color-surface-raised);
+  box-shadow: 0 0 0 2px var(--color-accent-soft), var(--shadow-soft);
 }
 
 .message-content p {
@@ -694,7 +700,7 @@ button:disabled {
 }
 
 .message-code-meta,
-.code-file-meta {
+.code-file-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -761,8 +767,29 @@ button:disabled {
   padding: 8px 10px 8px 12px;
 }
 
-.code-file-meta {
+.code-file-link {
   overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.code-file-link:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.code-file-link:hover:not(:disabled) h3 {
+  color: var(--color-accent);
+}
+
+.code-file-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .code-file h3 {

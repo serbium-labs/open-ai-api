@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 
 import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
@@ -9,6 +9,10 @@ import {
 } from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
+import {
+  resolveResourceNavigation,
+  type ResourceNavigationTarget,
+} from "@components/resourceNavigation";
 import { UI_TEXT } from "@constants";
 import type { ChatDetail, ChatSummary } from "@models";
 
@@ -68,6 +72,8 @@ export function App(): ReactElement {
   const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
   const [chatListStatus, setChatListStatus] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
+  const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
+  const resourceNavigationRequestId = useRef<number>(0);
   const isBusy: boolean = isRunning || deletingChatId !== undefined;
 
   useEffect(() => {
@@ -87,6 +93,10 @@ export function App(): ReactElement {
   useEffect(() => {
     saveSidebarPreferences(getLocalStorage(), sidebarState.preferences);
   }, [sidebarState.preferences]);
+
+  useEffect(() => {
+    setResourceNavigationTarget(undefined);
+  }, [currentChatId]);
 
   useEffect(() => {
     let isMounted: boolean = true;
@@ -217,6 +227,13 @@ export function App(): ReactElement {
     dispatchSidebarAction({ type: "toggleResources" });
   }
 
+  function handleResourceNavigate(resourceId: string): void {
+    resourceNavigationRequestId.current += 1;
+    setResourceNavigationTarget(
+      resolveResourceNavigation(files, resourceId, resourceNavigationRequestId.current),
+    );
+  }
+
   return (
     <>
       {isChatHistoryOpen ? (
@@ -314,7 +331,10 @@ export function App(): ReactElement {
             className={`chat-column${messages.length === 0 ? " chat-column-empty" : " chat-column-active"}`}
             aria-label="Chat"
           >
-            <ChatTranscript messages={messages} />
+            <ChatTranscript
+              messages={messages}
+              resourceNavigationTarget={resourceNavigationTarget}
+            />
             <PromptForm
               prompt={prompt}
               isRunning={isBusy}
@@ -346,7 +366,11 @@ export function App(): ReactElement {
       </button>
       {isResourcesOpen ? (
         <aside className="resources-sidebar" aria-label="Chat resources">
-          <CodeFiles files={files} status={codeStatus} />
+          <CodeFiles
+            files={files}
+            status={codeStatus}
+            onResourceNavigate={handleResourceNavigate}
+          />
         </aside>
       ) : null}
     </>

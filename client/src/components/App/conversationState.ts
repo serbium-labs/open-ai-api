@@ -1,11 +1,11 @@
 import type { ChatMessage } from "@components/ChatTranscript";
 import { UI_TEXT } from "@constants";
-import type { ChatDetail, ChatSummary, CodeFile, PersistedChatMessage } from "@models";
+import type { ChatDetail, ChatResource, ChatSummary, CodeFile, PersistedChatMessage } from "@models";
 
 export type ConversationState = {
   currentChatId: string | undefined;
   messages: ChatMessage[];
-  files: CodeFile[];
+  files: ChatResource[];
   codeStatus: string;
 };
 
