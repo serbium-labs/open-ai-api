@@ -6,12 +6,20 @@ import {
   ChatTranscript,
   failAssistantMessage,
   type AppendPromptTurnResult,
-  type ChatMessage,
 } from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
 import { UI_TEXT } from "@constants";
-import type { ChatDetail, ChatSummary, CodeFile, PersistedChatMessage } from "@models";
+import type { ChatDetail, ChatSummary } from "@models";
+
+import {
+  conversationStateFromChat,
+  createFreshConversationState,
+  getCodeStatus,
+  loadChatHistory,
+  loadConversation,
+  type ConversationState,
+} from "./conversationState";
 
 import {
   createInitialSidebarState,
@@ -21,37 +29,8 @@ import {
   saveSidebarPreferences,
 } from "./sidebarState";
 
-function getCodeStatus(files: CodeFile[]): string {
-  if (files.length === 0) {
-    return UI_TEXT.emptyCode;
-  }
-
-  return `${files.length} file${files.length === 1 ? "" : "s"}`;
-}
-
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-function toChatMessages(messages: PersistedChatMessage[]): ChatMessage[] {
-  return messages.map((message: PersistedChatMessage) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    status: "complete",
-  }));
-}
-
-function applyChatDetail(chat: ChatDetail): {
-  messages: ChatMessage[];
-  files: CodeFile[];
-  codeStatus: string;
-} {
-  return {
-    messages: toChatMessages(chat.messages),
-    files: chat.resources,
-    codeStatus: getCodeStatus(chat.resources),
-  };
 }
 
 function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSummary[] {
@@ -77,11 +56,9 @@ function getLocalStorage(): Storage | undefined {
 
 export function App(): ReactElement {
   const [prompt, setPrompt] = useState<string>("");
-  const [files, setFiles] = useState<CodeFile[]>([]);
-  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | undefined>(undefined);
+  const { codeStatus, currentChatId, files, messages } = conversationState;
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [sidebarState, dispatchSidebarAction] = useReducer(
     reduceSidebarState,
@@ -116,29 +93,13 @@ export function App(): ReactElement {
 
     async function loadInitialChats(): Promise<void> {
       try {
-        const summaries: ChatSummary[] = await fetchChats();
+        const summaries: ChatSummary[] = await loadChatHistory(fetchChats);
 
         if (!isMounted) {
           return;
         }
 
         setChatSummaries(summaries);
-
-        if (summaries.length === 0) {
-          return;
-        }
-
-        const chat: ChatDetail = await fetchChat(summaries[0].id);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const detail = applyChatDetail(chat);
-        setCurrentChatId(chat.id);
-        setMessages(detail.messages);
-        setFiles(detail.files);
-        setCodeStatus(detail.codeStatus);
       } catch (error: unknown) {
         if (isMounted) {
           setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
@@ -158,13 +119,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const chat: ChatDetail = await fetchChat(chatId);
-    const detail = applyChatDetail(chat);
-
-    setCurrentChatId(chat.id);
-    setMessages(detail.messages);
-    setFiles(detail.files);
-    setCodeStatus(detail.codeStatus);
+    setConversationState(await loadConversation(chatId, fetchChat));
     setPrompt("");
   }
 
@@ -173,10 +128,7 @@ export function App(): ReactElement {
       return;
     }
 
-    setCurrentChatId(undefined);
-    setMessages([]);
-    setFiles([]);
-    setCodeStatus(UI_TEXT.emptyCode);
+    setConversationState(createFreshConversationState());
     setPrompt("");
   }
 
@@ -210,10 +162,7 @@ export function App(): ReactElement {
       );
 
       if (chat.id === currentChatId) {
-        setCurrentChatId(undefined);
-        setMessages([]);
-        setFiles([]);
-        setCodeStatus(UI_TEXT.emptyCode);
+        setConversationState(createFreshConversationState());
         setPrompt("");
       }
     } catch (error: unknown) {
@@ -226,32 +175,35 @@ export function App(): ReactElement {
   async function handleSubmit(submittedPrompt: string): Promise<void> {
     const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, submittedPrompt);
 
-    setMessages(nextTurn.messages);
+    setConversationState((currentState: ConversationState) => ({
+      ...currentState,
+      messages: nextTurn.messages,
+      codeStatus: UI_TEXT.loadingCode,
+    }));
     setPrompt("");
     setIsRunning(true);
-    setCodeStatus(UI_TEXT.loadingCode);
 
     try {
       const chat: ChatDetail =
         currentChatId === undefined
           ? await createChat(undefined)
           : await fetchChat(currentChatId);
-      setCurrentChatId(chat.id);
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        currentChatId: chat.id,
+      }));
       const result = await submitChatMessage(chat.id, submittedPrompt);
-      const detail = applyChatDetail(result.chat);
 
-      setCurrentChatId(result.chat.id);
       setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
-      setMessages(detail.messages);
-      setFiles(detail.files);
-      setCodeStatus(detail.codeStatus);
+      setConversationState(conversationStateFromChat(result.chat));
     } catch (error: unknown) {
       const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
 
-      setMessages((currentMessages: ChatMessage[]) =>
-        failAssistantMessage(currentMessages, nextTurn.assistantMessageId, message),
-      );
-      setCodeStatus(getCodeStatus(files));
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        messages: failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
+        codeStatus: getCodeStatus(currentState.files),
+      }));
     } finally {
       setIsRunning(false);
     }
