@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useReducer, useState, type ReactElement } from "react";
 
 import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
@@ -12,6 +12,12 @@ import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
 import { UI_TEXT } from "@constants";
 import type { ChatDetail, ChatSummary, CodeFile, PersistedChatMessage } from "@models";
+
+import {
+  createInitialSidebarState,
+  MOBILE_MEDIA_QUERY,
+  reduceSidebarState,
+} from "./sidebarState";
 
 function getCodeStatus(files: CodeFile[]): string {
   if (files.length === 0) {
@@ -56,7 +62,7 @@ function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSu
 }
 
 function isMobileViewport(): boolean {
-  return window.matchMedia("(max-width: 640px)").matches;
+  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
 }
 
 export function App(): ReactElement {
@@ -67,11 +73,29 @@ export function App(): ReactElement {
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [isChatHistoryOpen, setIsChatHistoryOpen] = useState<boolean>(true);
-  const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
+  const [sidebarState, dispatchSidebarAction] = useReducer(
+    reduceSidebarState,
+    undefined,
+    () => createInitialSidebarState(isMobileViewport()),
+  );
+  const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
   const [chatListStatus, setChatListStatus] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
   const isBusy: boolean = isRunning || deletingChatId !== undefined;
+
+  useEffect(() => {
+    const mobileMediaQuery: MediaQueryList = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const handleViewportChange = (event: MediaQueryListEvent): void => {
+      dispatchSidebarAction({ type: "viewportChanged", isMobile: event.matches });
+    };
+
+    mobileMediaQuery.addEventListener("change", handleViewportChange);
+    dispatchSidebarAction({ type: "viewportChanged", isMobile: mobileMediaQuery.matches });
+
+    return () => {
+      mobileMediaQuery.removeEventListener("change", handleViewportChange);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted: boolean = true;
@@ -220,23 +244,11 @@ export function App(): ReactElement {
   }
 
   function toggleChatHistory(): void {
-    const nextIsOpen: boolean = !isChatHistoryOpen;
-
-    setIsChatHistoryOpen(nextIsOpen);
-
-    if (nextIsOpen && isMobileViewport()) {
-      setIsResourcesOpen(false);
-    }
+    dispatchSidebarAction({ type: "toggleChatHistory" });
   }
 
   function toggleResources(): void {
-    const nextIsOpen: boolean = !isResourcesOpen;
-
-    setIsResourcesOpen(nextIsOpen);
-
-    if (nextIsOpen && isMobileViewport()) {
-      setIsChatHistoryOpen(false);
-    }
+    dispatchSidebarAction({ type: "toggleResources" });
   }
 
   return (
