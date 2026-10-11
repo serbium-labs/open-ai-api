@@ -10,6 +10,7 @@ export const API_ROUTES = {
 } as const;
 export const HTTP_STATUS = {
   ok: 200,
+  noContent: 204,
   badRequest: 400,
   notFound: 404,
   internalServerError: 500,

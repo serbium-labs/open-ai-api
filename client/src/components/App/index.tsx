@@ -1,49 +1,40 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 
-import { createChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
+import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
   appendPromptTurn,
   ChatTranscript,
   failAssistantMessage,
   type AppendPromptTurnResult,
-  type ChatMessage,
 } from "@components/ChatTranscript";
 import { CodeFiles } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
+import {
+  resolveResourceNavigation,
+  type ResourceNavigationTarget,
+} from "@components/resourceNavigation";
 import { UI_TEXT } from "@constants";
-import type { ChatDetail, ChatSummary, CodeFile, PersistedChatMessage } from "@models";
+import type { ChatDetail, ChatSummary } from "@models";
 
-function getCodeStatus(files: CodeFile[]): string {
-  if (files.length === 0) {
-    return UI_TEXT.emptyCode;
-  }
+import {
+  conversationStateFromChat,
+  createFreshConversationState,
+  getCodeStatus,
+  loadChatHistory,
+  loadConversation,
+  type ConversationState,
+} from "./conversationState";
 
-  return `${files.length} file${files.length === 1 ? "" : "s"}`;
-}
+import {
+  createInitialSidebarState,
+  loadSidebarPreferences,
+  MOBILE_MEDIA_QUERY,
+  reduceSidebarState,
+  saveSidebarPreferences,
+} from "./sidebarState";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-function toChatMessages(messages: PersistedChatMessage[]): ChatMessage[] {
-  return messages.map((message: PersistedChatMessage) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    status: "complete",
-  }));
-}
-
-function applyChatDetail(chat: ChatDetail): {
-  messages: ChatMessage[];
-  files: CodeFile[];
-  codeStatus: string;
-} {
-  return {
-    messages: toChatMessages(chat.messages),
-    files: chat.resources,
-    codeStatus: getCodeStatus(chat.resources),
-  };
 }
 
 function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSummary[] {
@@ -56,49 +47,69 @@ function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSu
 }
 
 function isMobileViewport(): boolean {
-  return window.matchMedia("(max-width: 640px)").matches;
+  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+}
+
+function getLocalStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 export function App(): ReactElement {
   const [prompt, setPrompt] = useState<string>("");
-  const [files, setFiles] = useState<CodeFile[]>([]);
-  const [codeStatus, setCodeStatus] = useState<string>(UI_TEXT.emptyCode);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | undefined>(undefined);
+  const { codeStatus, currentChatId, files, messages } = conversationState;
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [isChatHistoryOpen, setIsChatHistoryOpen] = useState<boolean>(true);
-  const [isResourcesOpen, setIsResourcesOpen] = useState<boolean>(false);
+  const [sidebarState, dispatchSidebarAction] = useReducer(
+    reduceSidebarState,
+    undefined,
+    () => createInitialSidebarState(isMobileViewport(), loadSidebarPreferences(getLocalStorage())),
+  );
+  const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
   const [chatListStatus, setChatListStatus] = useState<string>("");
+  const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
+  const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
+  const resourceNavigationRequestId = useRef<number>(0);
+  const isBusy: boolean = isRunning || deletingChatId !== undefined;
+
+  useEffect(() => {
+    const mobileMediaQuery: MediaQueryList = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const handleViewportChange = (event: MediaQueryListEvent): void => {
+      dispatchSidebarAction({ type: "viewportChanged", isMobile: event.matches });
+    };
+
+    mobileMediaQuery.addEventListener("change", handleViewportChange);
+    dispatchSidebarAction({ type: "viewportChanged", isMobile: mobileMediaQuery.matches });
+
+    return () => {
+      mobileMediaQuery.removeEventListener("change", handleViewportChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    saveSidebarPreferences(getLocalStorage(), sidebarState.preferences);
+  }, [sidebarState.preferences]);
+
+  useEffect(() => {
+    setResourceNavigationTarget(undefined);
+  }, [currentChatId]);
 
   useEffect(() => {
     let isMounted: boolean = true;
 
     async function loadInitialChats(): Promise<void> {
       try {
-        const summaries: ChatSummary[] = await fetchChats();
+        const summaries: ChatSummary[] = await loadChatHistory(fetchChats);
 
         if (!isMounted) {
           return;
         }
 
         setChatSummaries(summaries);
-
-        if (summaries.length === 0) {
-          return;
-        }
-
-        const chat: ChatDetail = await fetchChat(summaries[0].id);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const detail = applyChatDetail(chat);
-        setCurrentChatId(chat.id);
-        setMessages(detail.messages);
-        setFiles(detail.files);
-        setCodeStatus(detail.codeStatus);
       } catch (error: unknown) {
         if (isMounted) {
           setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
@@ -114,34 +125,25 @@ export function App(): ReactElement {
   }, []);
 
   async function openChat(chatId: string): Promise<void> {
-    if (isRunning || chatId === currentChatId) {
+    if (isBusy || chatId === currentChatId) {
       return;
     }
 
-    const chat: ChatDetail = await fetchChat(chatId);
-    const detail = applyChatDetail(chat);
-
-    setCurrentChatId(chat.id);
-    setMessages(detail.messages);
-    setFiles(detail.files);
-    setCodeStatus(detail.codeStatus);
+    setConversationState(await loadConversation(chatId, fetchChat));
     setPrompt("");
   }
 
   function handleNewChat(): void {
-    if (messages.length === 0 || isRunning) {
+    if (messages.length === 0 || isBusy) {
       return;
     }
 
-    setCurrentChatId(undefined);
-    setMessages([]);
-    setFiles([]);
-    setCodeStatus(UI_TEXT.emptyCode);
+    setConversationState(createFreshConversationState());
     setPrompt("");
   }
 
   async function handleRenameChat(chat: ChatSummary): Promise<void> {
-    if (isRunning) {
+    if (isBusy) {
       return;
     }
 
@@ -155,58 +157,81 @@ export function App(): ReactElement {
     setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(renamedChat, summaries));
   }
 
+  async function handleDeleteChat(chat: ChatSummary): Promise<void> {
+    if (isBusy || !window.confirm(UI_TEXT.deleteChatConfirmation)) {
+      return;
+    }
+
+    setDeletingChatId(chat.id);
+    setChatListStatus("");
+
+    try {
+      await deleteChat(chat.id);
+      setChatSummaries((summaries: ChatSummary[]) =>
+        summaries.filter((summary: ChatSummary) => summary.id !== chat.id),
+      );
+
+      if (chat.id === currentChatId) {
+        setConversationState(createFreshConversationState());
+        setPrompt("");
+      }
+    } catch (error: unknown) {
+      setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
+    } finally {
+      setDeletingChatId(undefined);
+    }
+  }
+
   async function handleSubmit(submittedPrompt: string): Promise<void> {
     const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, submittedPrompt);
 
-    setMessages(nextTurn.messages);
+    setConversationState((currentState: ConversationState) => ({
+      ...currentState,
+      messages: nextTurn.messages,
+      codeStatus: UI_TEXT.loadingCode,
+    }));
     setPrompt("");
     setIsRunning(true);
-    setCodeStatus(UI_TEXT.loadingCode);
 
     try {
       const chat: ChatDetail =
         currentChatId === undefined
           ? await createChat(undefined)
           : await fetchChat(currentChatId);
-      setCurrentChatId(chat.id);
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        currentChatId: chat.id,
+      }));
       const result = await submitChatMessage(chat.id, submittedPrompt);
-      const detail = applyChatDetail(result.chat);
 
-      setCurrentChatId(result.chat.id);
       setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
-      setMessages(detail.messages);
-      setFiles(detail.files);
-      setCodeStatus(detail.codeStatus);
+      setConversationState(conversationStateFromChat(result.chat));
     } catch (error: unknown) {
       const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
 
-      setMessages((currentMessages: ChatMessage[]) =>
-        failAssistantMessage(currentMessages, nextTurn.assistantMessageId, message),
-      );
-      setCodeStatus(getCodeStatus(files));
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        messages: failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
+        codeStatus: getCodeStatus(currentState.files),
+      }));
     } finally {
       setIsRunning(false);
     }
   }
 
   function toggleChatHistory(): void {
-    const nextIsOpen: boolean = !isChatHistoryOpen;
-
-    setIsChatHistoryOpen(nextIsOpen);
-
-    if (nextIsOpen && isMobileViewport()) {
-      setIsResourcesOpen(false);
-    }
+    dispatchSidebarAction({ type: "toggleChatHistory" });
   }
 
   function toggleResources(): void {
-    const nextIsOpen: boolean = !isResourcesOpen;
+    dispatchSidebarAction({ type: "toggleResources" });
+  }
 
-    setIsResourcesOpen(nextIsOpen);
-
-    if (nextIsOpen && isMobileViewport()) {
-      setIsChatHistoryOpen(false);
-    }
+  function handleResourceNavigate(resourceId: string): void {
+    resourceNavigationRequestId.current += 1;
+    setResourceNavigationTarget(
+      resolveResourceNavigation(files, resourceId, resourceNavigationRequestId.current),
+    );
   }
 
   return (
@@ -218,7 +243,7 @@ export function App(): ReactElement {
             <button
               className="chat-history-new-button"
               type="button"
-              disabled={messages.length === 0 || isRunning}
+              disabled={messages.length === 0 || isBusy}
               aria-label={UI_TEXT.newChatButton}
               data-tooltip={messages.length === 0 ? UI_TEXT.emptyChatTooltip : UI_TEXT.newChatButton}
               onClick={handleNewChat}
@@ -233,14 +258,14 @@ export function App(): ReactElement {
             {chatSummaries.map((chat: ChatSummary) => (
               <div
                 className={`chat-history-item${chat.id === currentChatId ? " chat-history-item-active" : ""}${
-                  isRunning && chat.id !== currentChatId ? " chat-history-item-locked" : ""
+                  isBusy && chat.id !== currentChatId ? " chat-history-item-locked" : ""
                 }`}
                 key={chat.id}
               >
                 <button
                   className="chat-history-open-button"
                   type="button"
-                  disabled={isRunning && chat.id !== currentChatId}
+                  disabled={isBusy && chat.id !== currentChatId}
                   aria-current={chat.id === currentChatId ? "page" : undefined}
                   onClick={() => {
                     void openChat(chat.id);
@@ -252,7 +277,7 @@ export function App(): ReactElement {
                 <button
                   className="chat-history-rename-button"
                   type="button"
-                  disabled={isRunning}
+                  disabled={isBusy}
                   aria-label={UI_TEXT.renameChatButton}
                   data-tooltip={UI_TEXT.renameChatButton}
                   onClick={() => {
@@ -261,6 +286,20 @@ export function App(): ReactElement {
                 >
                   <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
                     <path d="m4 16.6-.7 4.1 4.1-.7L18.7 8.7l-3.4-3.4L4 16.6Zm13.2-12.7 3 3 .8-.8a2.1 2.1 0 0 0-3-3l-.8.8Z" />
+                  </svg>
+                </button>
+                <button
+                  className="chat-history-delete-button"
+                  type="button"
+                  disabled={isBusy}
+                  aria-label={UI_TEXT.deleteChatButton}
+                  data-tooltip={UI_TEXT.deleteChatButton}
+                  onClick={() => {
+                    void handleDeleteChat(chat);
+                  }}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                    <path d="M8 4h8l1 2h4v2H3V6h4l1-2Zm1 6h2v8H9v-8Zm4 0h2v8h-2v-8ZM6 10h2v8h8v-8h2v9a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-9Z" />
                   </svg>
                 </button>
               </div>
@@ -292,10 +331,13 @@ export function App(): ReactElement {
             className={`chat-column${messages.length === 0 ? " chat-column-empty" : " chat-column-active"}`}
             aria-label="Chat"
           >
-            <ChatTranscript messages={messages} />
+            <ChatTranscript
+              messages={messages}
+              resourceNavigationTarget={resourceNavigationTarget}
+            />
             <PromptForm
               prompt={prompt}
-              isRunning={isRunning}
+              isRunning={isBusy}
               onPromptChange={setPrompt}
               onSubmit={(submittedPrompt: string) => {
                 void handleSubmit(submittedPrompt);
@@ -324,7 +366,11 @@ export function App(): ReactElement {
       </button>
       {isResourcesOpen ? (
         <aside className="resources-sidebar" aria-label="Chat resources">
-          <CodeFiles files={files} status={codeStatus} />
+          <CodeFiles
+            files={files}
+            status={codeStatus}
+            onResourceNavigate={handleResourceNavigate}
+          />
         </aside>
       ) : null}
     </>

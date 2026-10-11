@@ -1,12 +1,13 @@
 import { UI_TEXT } from "@constants";
 import { CopyButton } from "@components/CopyButton";
 import { HighlightedCode } from "@components/HighlightedCode";
-import type { ChatResource, CodeFile } from "@models";
+import type { ChatResource } from "@models";
 import type { ReactElement } from "react";
 
 export type CodeFilesProps = {
-  files: CodeFile[];
+  files: ChatResource[];
   status: string;
+  onResourceNavigate: (resourceId: string) => void;
 };
 
 const EXTENSION_LABELS: ReadonlyMap<string, string> = new Map([
@@ -43,7 +44,7 @@ function getLanguageLabel(path: string, content: string): string | undefined {
   return EXTENSION_LABELS.get(extension) ?? extension;
 }
 
-export function CodeFiles({ files, status }: CodeFilesProps): ReactElement {
+export function CodeFiles({ files, status, onResourceNavigate }: CodeFilesProps): ReactElement {
   return (
     <section
       className="code-section"
@@ -55,17 +56,21 @@ export function CodeFiles({ files, status }: CodeFilesProps): ReactElement {
         {status}
       </p>
       <div className="code-files">
-        {files.map((file: CodeFile) => {
-          const resourceLanguage: string | undefined = "language" in file ? (file as ChatResource).language : undefined;
-          const languageLabel: string | undefined = resourceLanguage ?? getLanguageLabel(file.path, file.content);
+        {files.map((file: ChatResource) => {
+          const languageLabel: string | undefined = file.language ?? getLanguageLabel(file.path, file.content);
 
           return (
-            <article className="code-file" key={file.path}>
+            <article className="code-file" key={file.id}>
               <header className="code-file-header">
-                <div className="code-file-meta">
+                <button
+                  className="code-file-link"
+                  type="button"
+                  aria-label={`Go to ${file.path} in chat`}
+                  onClick={() => onResourceNavigate(file.id)}
+                >
                   {languageLabel ? <span className="code-language-label">{languageLabel}</span> : null}
                   <h3>{file.path}</h3>
-                </div>
+                </button>
                 <CopyButton text={file.content} label="Copy file" />
               </header>
               <pre>
