@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, posix, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -273,6 +273,16 @@ export class ChatArchiveService {
 
     await this.writeChatMetadata(location.directory, updatedSummary);
     return this.loadChat(chatId);
+  }
+
+  public async deleteChat(chatId: string): Promise<void> {
+    const location: StoredChatLocation | undefined = await this.findChatLocation(chatId);
+
+    if (location === undefined) {
+      throw new Error("Chat not found");
+    }
+
+    await rm(location.directory, { recursive: true });
   }
 
   public async saveThreadId(chatId: string, codexThreadId: string): Promise<void> {
