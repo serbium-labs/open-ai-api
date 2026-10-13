@@ -2,7 +2,9 @@ import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { App } from "@components/App";
+import { TooltipLayer } from "@components/TooltipLayer";
 import "./styles.css";
+import "./styles/tooltips.css";
 
 const rootElement: HTMLElement | null = document.querySelector("#root");
 
@@ -15,5 +17,6 @@ const root: Root = createRoot(rootElement);
 root.render(
   <StrictMode>
     <App />
+    <TooltipLayer />
   </StrictMode>,
 );

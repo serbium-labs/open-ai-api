@@ -246,6 +246,7 @@ export function App(): ReactElement {
               disabled={messages.length === 0 || isBusy}
               aria-label={UI_TEXT.newChatButton}
               data-tooltip={messages.length === 0 ? UI_TEXT.emptyChatTooltip : UI_TEXT.newChatButton}
+              data-tooltip-placement="left"
               onClick={handleNewChat}
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
@@ -280,6 +281,8 @@ export function App(): ReactElement {
                   disabled={isBusy}
                   aria-label={UI_TEXT.renameChatButton}
                   data-tooltip={UI_TEXT.renameChatButton}
+                  data-tooltip-placement="top"
+                  data-tooltip-align="end"
                   onClick={() => {
                     void handleRenameChat(chat);
                   }}
@@ -294,6 +297,8 @@ export function App(): ReactElement {
                   disabled={isBusy}
                   aria-label={UI_TEXT.deleteChatButton}
                   data-tooltip={UI_TEXT.deleteChatButton}
+                  data-tooltip-placement="top"
+                  data-tooltip-align="end"
                   onClick={() => {
                     void handleDeleteChat(chat);
                   }}
@@ -313,6 +318,7 @@ export function App(): ReactElement {
         aria-label={isChatHistoryOpen ? UI_TEXT.hideChatHistoryButton : UI_TEXT.chatHistoryButton}
         aria-expanded={isChatHistoryOpen}
         data-tooltip={isChatHistoryOpen ? UI_TEXT.hideChatHistoryTooltip : UI_TEXT.chatHistoryTooltip}
+        data-tooltip-placement="right"
         onClick={toggleChatHistory}
       >
         {isChatHistoryOpen ? (
@@ -352,6 +358,7 @@ export function App(): ReactElement {
         aria-label={isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
         aria-expanded={isResourcesOpen}
         data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
+        data-tooltip-placement="left"
         onClick={toggleResources}
       >
         {isResourcesOpen ? (

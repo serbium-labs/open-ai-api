@@ -1,0 +1,138 @@
+:root {
+  /* CSSPortal Tooltip Generator design tokens. */
+  --tooltip-background-rgb: 47 48 47;
+  --tooltip-background-opacity: 1;
+  --tooltip-text-color: #ffffff;
+  --tooltip-border-radius: 8px;
+  --tooltip-padding-block: 7px;
+  --tooltip-padding-inline: 9px;
+  --tooltip-max-width: 220px;
+  --tooltip-font-size: 14px;
+  --tooltip-arrow-size: 8px;
+  --tooltip-shadow-color: #000000;
+  --tooltip-shadow-blur: 0px;
+
+  /* Shared geometry and Slide-In behavior. */
+  --tooltip-arrow-overlap: 1px;
+  --tooltip-trigger-gap: 4px;
+  --tooltip-motion-distance: 10px;
+  --tooltip-transition-duration: 0.3s;
+  --tooltip-transition-timing: cubic-bezier(0.23, 1, 0.32, 1);
+  --tooltip-viewport-padding: 8px;
+  --tooltip-z-index: 1000;
+}
+
+/*
+ * Tooltip triggers keep their native layout and cursor. TooltipLayer reads these
+ * universal data attributes and renders the visual in document.body so a
+ * scroll container cannot clip it.
+ */
+:where([data-tooltip]) {
+  --tooltip-trigger-enabled: 1;
+}
+
+.tooltip-popup {
+  position: fixed;
+  z-index: var(--tooltip-z-index);
+  width: max-content;
+  max-width: min(var(--tooltip-max-width), calc(100vw - 2 * var(--tooltip-viewport-padding)));
+  box-sizing: border-box;
+  padding: var(--tooltip-padding-block) var(--tooltip-padding-inline);
+  color: transparent;
+  font-size: var(--tooltip-font-size);
+  line-height: normal;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: var(--tooltip-hidden-transform);
+  transition:
+    opacity var(--tooltip-transition-duration) var(--tooltip-transition-timing),
+    transform var(--tooltip-transition-duration) var(--tooltip-transition-timing),
+    visibility var(--tooltip-transition-duration) step-end;
+  visibility: hidden;
+  white-space: normal;
+}
+
+/* CSSPortal uses ::before for the text bubble and ::after for the arrow. */
+.tooltip-popup::before,
+.tooltip-popup::after {
+  position: absolute;
+  pointer-events: none;
+}
+
+.tooltip-popup::before {
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: var(--tooltip-border-radius);
+  padding: var(--tooltip-padding-block) var(--tooltip-padding-inline);
+  background: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
+  box-shadow: 0 0 var(--tooltip-shadow-blur) var(--tooltip-shadow-color);
+  color: var(--tooltip-text-color);
+  content: attr(data-tooltip-content);
+}
+
+.tooltip-popup::after {
+  border: var(--tooltip-arrow-size) solid transparent;
+  content: "";
+}
+
+.tooltip-popup[data-tooltip-visible="true"] {
+  opacity: 1;
+  transform: translate(0, 0);
+  transition:
+    opacity var(--tooltip-transition-duration) var(--tooltip-transition-timing),
+    transform var(--tooltip-transition-duration) var(--tooltip-transition-timing),
+    visibility 0s;
+  visibility: visible;
+}
+
+.tooltip-popup[data-tooltip-placement="top"] {
+  --tooltip-hidden-transform: translateY(var(--tooltip-motion-distance));
+}
+
+.tooltip-popup[data-tooltip-placement="top"]::after {
+  top: calc(100% - var(--tooltip-arrow-overlap));
+  left: var(--tooltip-arrow-x);
+  border-top-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
+  transform: translateX(-50%);
+}
+
+.tooltip-popup[data-tooltip-placement="bottom"] {
+  --tooltip-hidden-transform: translateY(calc(0px - var(--tooltip-motion-distance)));
+}
+
+.tooltip-popup[data-tooltip-placement="bottom"]::after {
+  bottom: calc(100% - var(--tooltip-arrow-overlap));
+  left: var(--tooltip-arrow-x);
+  border-bottom-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
+  transform: translateX(-50%);
+}
+
+.tooltip-popup[data-tooltip-placement="left"] {
+  --tooltip-hidden-transform: translateX(var(--tooltip-motion-distance));
+}
+
+.tooltip-popup[data-tooltip-placement="left"]::after {
+  top: var(--tooltip-arrow-y);
+  left: calc(100% - var(--tooltip-arrow-overlap));
+  border-left-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
+  transform: translateY(-50%);
+}
+
+.tooltip-popup[data-tooltip-placement="right"] {
+  --tooltip-hidden-transform: translateX(calc(0px - var(--tooltip-motion-distance)));
+}
+
+.tooltip-popup[data-tooltip-placement="right"]::after {
+  top: var(--tooltip-arrow-y);
+  right: calc(100% - var(--tooltip-arrow-overlap));
+  border-right-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
+  transform: translateY(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-popup {
+    --tooltip-motion-distance: 0px;
+    --tooltip-transition-duration: 0s;
+  }
+}
