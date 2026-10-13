@@ -7,7 +7,11 @@
   --tooltip-padding-block: 7px;
   --tooltip-padding-inline: 9px;
   --tooltip-max-width: 220px;
+  --tooltip-font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --tooltip-font-size: 14px;
+  --tooltip-font-weight: 400;
+  --tooltip-line-height: 17px;
   --tooltip-arrow-size: 8px;
   --tooltip-shadow-color: #000000;
   --tooltip-shadow-blur: 0px;
@@ -51,16 +55,23 @@
   box-shadow: 0 0 var(--tooltip-shadow-blur) var(--tooltip-shadow-color);
   color: var(--tooltip-text-color);
   content: attr(data-tooltip);
+  font-family: var(--tooltip-font-family);
   font-size: var(--tooltip-font-size);
-  line-height: normal;
+  font-weight: var(--tooltip-font-weight);
+  line-height: var(--tooltip-line-height);
   overflow-wrap: anywhere;
   text-align: center;
   white-space: normal;
 }
 
 :where([data-tooltip])::after {
+  width: 0;
+  height: 0;
+  box-sizing: content-box;
   border: var(--tooltip-arrow-size) solid transparent;
   content: "";
+  font-size: 0;
+  line-height: 0;
 }
 
 :where([data-tooltip]):is(:hover, :focus-visible)::before,
@@ -87,7 +98,7 @@
 }
 
 :where([data-tooltip][data-tooltip-placement="top"])::after {
-  bottom: calc(100% + var(--tooltip-trigger-gap));
+  bottom: calc(100% + var(--tooltip-trigger-gap) - var(--tooltip-arrow-size));
   left: 50%;
   border-top-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
 }
@@ -105,7 +116,7 @@
 }
 
 :where([data-tooltip][data-tooltip-placement="bottom"])::after {
-  top: calc(100% + var(--tooltip-trigger-gap));
+  top: calc(100% + var(--tooltip-trigger-gap) - var(--tooltip-arrow-size));
   left: 50%;
   border-bottom-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
 }
@@ -124,7 +135,7 @@
 
 :where([data-tooltip][data-tooltip-placement="left"])::after {
   top: 50%;
-  right: calc(100% + var(--tooltip-trigger-gap));
+  right: calc(100% + var(--tooltip-trigger-gap) - var(--tooltip-arrow-size));
   border-left-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
 }
 
@@ -142,7 +153,7 @@
 
 :where([data-tooltip][data-tooltip-placement="right"])::after {
   top: 50%;
-  left: calc(100% + var(--tooltip-trigger-gap));
+  left: calc(100% + var(--tooltip-trigger-gap) - var(--tooltip-arrow-size));
   border-right-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
 }
 
@@ -162,9 +173,9 @@
 
 /* Keep the first chat actions' top tooltips inside their scrolling container. */
 .chat-history-list {
-  row-gap: calc(var(--tooltip-font-size) + 2 * var(--tooltip-padding-block) + 2px);
+  row-gap: calc(var(--tooltip-line-height) + 2 * var(--tooltip-padding-block) + 2px);
   padding-block-start: calc(
-    var(--tooltip-font-size) + 2 * var(--tooltip-padding-block) + var(--tooltip-trigger-gap) +
+    var(--tooltip-line-height) + 2 * var(--tooltip-padding-block) + var(--tooltip-trigger-gap) +
       var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap)
   );
 }
