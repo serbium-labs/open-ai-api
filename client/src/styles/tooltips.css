@@ -22,63 +22,51 @@
   --tooltip-z-index: 1000;
 }
 
-/*
- * Tooltip triggers keep their native layout and cursor. TooltipLayer reads these
- * universal data attributes and renders the visual in document.body so a
- * scroll container cannot clip it.
- */
 :where([data-tooltip]) {
-  --tooltip-trigger-enabled: 1;
+  position: relative;
 }
 
-.tooltip-popup {
-  position: fixed;
+:where([data-tooltip])::before,
+:where([data-tooltip])::after {
+  position: absolute;
   z-index: var(--tooltip-z-index);
-  width: max-content;
-  max-width: min(var(--tooltip-max-width), calc(100vw - 2 * var(--tooltip-viewport-padding)));
-  box-sizing: border-box;
-  padding: var(--tooltip-padding-block) var(--tooltip-padding-inline);
-  color: transparent;
-  font-size: var(--tooltip-font-size);
-  line-height: normal;
   opacity: 0;
   pointer-events: none;
-  text-align: center;
-  transform: var(--tooltip-hidden-transform);
+  transform: translate(var(--tooltip-translate-x), var(--tooltip-translate-y))
+    translate(var(--tooltip-motion-x), var(--tooltip-motion-y));
   transition:
     opacity var(--tooltip-transition-duration) var(--tooltip-transition-timing),
     transform var(--tooltip-transition-duration) var(--tooltip-transition-timing),
     visibility var(--tooltip-transition-duration) step-end;
   visibility: hidden;
-  white-space: normal;
 }
 
-/* CSSPortal uses ::before for the text bubble and ::after for the arrow. */
-.tooltip-popup::before,
-.tooltip-popup::after {
-  position: absolute;
-  pointer-events: none;
-}
-
-.tooltip-popup::before {
-  inset: 0;
+:where([data-tooltip])::before {
+  width: max-content;
+  max-width: min(var(--tooltip-max-width), calc(100vw - 2 * var(--tooltip-viewport-padding)));
   box-sizing: border-box;
   border-radius: var(--tooltip-border-radius);
   padding: var(--tooltip-padding-block) var(--tooltip-padding-inline);
   background: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
   box-shadow: 0 0 var(--tooltip-shadow-blur) var(--tooltip-shadow-color);
   color: var(--tooltip-text-color);
-  content: attr(data-tooltip-content);
+  content: attr(data-tooltip);
+  font-size: var(--tooltip-font-size);
+  line-height: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
 }
 
-.tooltip-popup::after {
+:where([data-tooltip])::after {
   border: var(--tooltip-arrow-size) solid transparent;
   content: "";
 }
 
-.tooltip-popup[data-tooltip-visible="true"] {
+:where([data-tooltip]):is(:hover, :focus-visible)::before,
+:where([data-tooltip]):is(:hover, :focus-visible)::after {
   opacity: 1;
-  transform: translate(0, 0);
+  transform: translate(var(--tooltip-translate-x), var(--tooltip-translate-y));
   transition:
     opacity var(--tooltip-transition-duration) var(--tooltip-transition-timing),
     transform var(--tooltip-transition-duration) var(--tooltip-transition-timing),
@@ -86,52 +74,103 @@
   visibility: visible;
 }
 
-.tooltip-popup[data-tooltip-placement="top"] {
-  --tooltip-hidden-transform: translateY(var(--tooltip-motion-distance));
+:where([data-tooltip][data-tooltip-placement="top"]) {
+  --tooltip-translate-x: -50%;
+  --tooltip-translate-y: 0;
+  --tooltip-motion-x: 0;
+  --tooltip-motion-y: var(--tooltip-motion-distance);
 }
 
-.tooltip-popup[data-tooltip-placement="top"]::after {
-  top: calc(100% - var(--tooltip-arrow-overlap));
-  left: var(--tooltip-arrow-x);
+:where([data-tooltip][data-tooltip-placement="top"])::before {
+  bottom: calc(100% + var(--tooltip-trigger-gap) + var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap));
+  left: 50%;
+}
+
+:where([data-tooltip][data-tooltip-placement="top"])::after {
+  bottom: calc(100% + var(--tooltip-trigger-gap));
+  left: 50%;
   border-top-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
-  transform: translateX(-50%);
 }
 
-.tooltip-popup[data-tooltip-placement="bottom"] {
-  --tooltip-hidden-transform: translateY(calc(0px - var(--tooltip-motion-distance)));
+:where([data-tooltip][data-tooltip-placement="bottom"]) {
+  --tooltip-translate-x: -50%;
+  --tooltip-translate-y: 0;
+  --tooltip-motion-x: 0;
+  --tooltip-motion-y: calc(0px - var(--tooltip-motion-distance));
 }
 
-.tooltip-popup[data-tooltip-placement="bottom"]::after {
-  bottom: calc(100% - var(--tooltip-arrow-overlap));
-  left: var(--tooltip-arrow-x);
+:where([data-tooltip][data-tooltip-placement="bottom"])::before {
+  top: calc(100% + var(--tooltip-trigger-gap) + var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap));
+  left: 50%;
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"])::after {
+  top: calc(100% + var(--tooltip-trigger-gap));
+  left: 50%;
   border-bottom-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
-  transform: translateX(-50%);
 }
 
-.tooltip-popup[data-tooltip-placement="left"] {
-  --tooltip-hidden-transform: translateX(var(--tooltip-motion-distance));
+:where([data-tooltip][data-tooltip-placement="left"]) {
+  --tooltip-translate-x: 0;
+  --tooltip-translate-y: -50%;
+  --tooltip-motion-x: var(--tooltip-motion-distance);
+  --tooltip-motion-y: 0;
 }
 
-.tooltip-popup[data-tooltip-placement="left"]::after {
-  top: var(--tooltip-arrow-y);
-  left: calc(100% - var(--tooltip-arrow-overlap));
+:where([data-tooltip][data-tooltip-placement="left"])::before {
+  top: 50%;
+  right: calc(100% + var(--tooltip-trigger-gap) + var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap));
+}
+
+:where([data-tooltip][data-tooltip-placement="left"])::after {
+  top: 50%;
+  right: calc(100% + var(--tooltip-trigger-gap));
   border-left-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
-  transform: translateY(-50%);
 }
 
-.tooltip-popup[data-tooltip-placement="right"] {
-  --tooltip-hidden-transform: translateX(calc(0px - var(--tooltip-motion-distance)));
+:where([data-tooltip][data-tooltip-placement="right"]) {
+  --tooltip-translate-x: 0;
+  --tooltip-translate-y: -50%;
+  --tooltip-motion-x: calc(0px - var(--tooltip-motion-distance));
+  --tooltip-motion-y: 0;
 }
 
-.tooltip-popup[data-tooltip-placement="right"]::after {
-  top: var(--tooltip-arrow-y);
-  right: calc(100% - var(--tooltip-arrow-overlap));
+:where([data-tooltip][data-tooltip-placement="right"])::before {
+  top: 50%;
+  left: calc(100% + var(--tooltip-trigger-gap) + var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap));
+}
+
+:where([data-tooltip][data-tooltip-placement="right"])::after {
+  top: 50%;
+  left: calc(100% + var(--tooltip-trigger-gap));
   border-right-color: rgb(var(--tooltip-background-rgb) / var(--tooltip-background-opacity));
-  transform: translateY(-50%);
+}
+
+:where([data-tooltip][data-tooltip-placement="top"][data-tooltip-align="end"]) {
+  --tooltip-translate-x: 0;
+}
+
+:where([data-tooltip][data-tooltip-placement="top"][data-tooltip-align="end"])::before {
+  right: 0;
+  left: auto;
+}
+
+:where([data-tooltip][data-tooltip-placement="top"][data-tooltip-align="end"])::after {
+  right: var(--tooltip-arrow-size);
+  left: auto;
+}
+
+/* Keep the first chat actions' top tooltips inside their scrolling container. */
+.chat-history-list {
+  row-gap: calc(var(--tooltip-font-size) + 2 * var(--tooltip-padding-block) + 2px);
+  padding-block-start: calc(
+    var(--tooltip-font-size) + 2 * var(--tooltip-padding-block) + var(--tooltip-trigger-gap) +
+      var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap)
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tooltip-popup {
+  :where([data-tooltip]) {
     --tooltip-motion-distance: 0px;
     --tooltip-transition-duration: 0s;
   }
