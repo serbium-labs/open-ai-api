@@ -34,6 +34,7 @@ export function CopyButton({ text, label = "Copy" }: CopyButtonProps): ReactElem
       type="button"
       aria-label={isCopied ? "Copied" : label}
       data-tooltip={isCopied ? "Copied" : label}
+      data-tooltip-placement="top"
       onClick={() => {
         void handleCopy();
       }}

@@ -76,6 +76,7 @@ export function PromptForm({
           disabled={isSubmitDisabled}
           aria-label={submitTooltip}
           data-tooltip={submitTooltip}
+          data-tooltip-placement="top"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
             <path d="M12 5 5.5 11.5l1.4 1.4 4.1-4.08V19h2V8.82l4.1 4.08 1.4-1.4L12 5Z" />
