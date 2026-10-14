@@ -8,6 +8,8 @@ export const UI_TEXT = {
   hideChatHistoryTooltip: "Close chat history",
   renameChatButton: "Rename chat",
   renamePrompt: "Rename chat",
+  deleteChatButton: "Delete chat",
+  deleteChatConfirmation: "Delete this chat? This cannot be undone.",
   emptyChatTooltip: "Send a message before starting a new chat",
   codeTitle: "Resources",
   resourcesButton: "Resources",

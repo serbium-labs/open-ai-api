@@ -210,6 +210,7 @@ export function PromptForm({
             disabled={isRunning}
             aria-label="Attach file"
             data-tooltip="Attach file"
+            data-tooltip-placement="top"
             onClick={() => fileInputRef.current?.click()}
           >
             <Paperclip size={20} strokeWidth={1.75} aria-hidden="true" />
@@ -238,6 +239,7 @@ export function PromptForm({
             disabled={isSubmitDisabled}
             aria-label={submitTooltip}
             data-tooltip={submitTooltip}
+            data-tooltip-placement="top"
           >
             <svg
               aria-hidden="true"
