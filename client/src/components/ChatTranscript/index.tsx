@@ -1,10 +1,15 @@
-import { useEffect, useRef, type ReactElement, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 
 import { CopyButton } from "@components/CopyButton";
 
 import { AudioPlayer } from "@components/AudioPlayer";
 import { HighlightedCode } from "@components/HighlightedCode";
 import type { ChatAttachment } from "@models";
+import {
+  getHighlightedMessageId,
+  getTranscriptScrollTop,
+  type ResourceNavigationTarget,
+} from "@components/resourceNavigation";
 
 export type ChatMessageRole = "user" | "assistant";
 
@@ -63,12 +68,16 @@ export type AppendPromptTurnResult = {
 export type ChatTranscriptProps = {
 
   messages: ChatMessage[];
-
   chatId: string | undefined;
-
+  resourceNavigationTarget?: ResourceNavigationTarget;
 };
 
 const FENCE_PATTERN: RegExp = /```([^\r\n`]*)\r?\n([\s\S]*?)\r?\n```/g;
+const RESOURCE_HIGHLIGHT_DURATION_MS: number = 2_000;
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 function normalizeCode(code: string): string {
 
@@ -686,35 +695,82 @@ function EmptyChatArt(): ReactElement {
 
 }
 
-export function ChatTranscript({ messages, chatId }: ChatTranscriptProps): ReactElement {
-
+export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: ChatTranscriptProps): ReactElement {
   const transcriptRef = useRef<HTMLElement>(null);
-
-  const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const highlightTimerRef = useRef<number | undefined>(undefined);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
 
     const transcript: HTMLElement | null = transcriptRef.current;
-
-    const scrollAnchor: HTMLDivElement | null = scrollAnchorRef.current;
-
-    if (transcript === null || scrollAnchor === null || messages.length === 0) {
-
+    if (transcript === null || messages.length === 0) {
       return;
 
     }
 
     const frameId: number = window.requestAnimationFrame(() => {
-
-      scrollAnchor.scrollIntoView({ block: "end", behavior: "smooth" });
-
-      transcript.scrollTop = transcript.scrollHeight;
-
+      transcript.scrollTo({
+        top: transcript.scrollHeight,
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
     });
 
     return () => window.cancelAnimationFrame(frameId);
 
   }, [messages]);
+
+  useEffect(() => {
+    if (highlightTimerRef.current !== undefined) {
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = undefined;
+    }
+
+    const messageId: string | undefined = getHighlightedMessageId(
+      resourceNavigationTarget,
+      messageRefs.current.keys(),
+    );
+    const transcript: HTMLElement | null = transcriptRef.current;
+    const messageElement: HTMLElement | undefined =
+      messageId === undefined ? undefined : messageRefs.current.get(messageId);
+
+    setHighlightedMessageId(undefined);
+
+    if (messageId === undefined || transcript === null || messageElement === undefined) {
+      return;
+    }
+
+    const frameId: number = window.requestAnimationFrame(() => {
+      const transcriptRect: DOMRect = transcript.getBoundingClientRect();
+      const messageRect: DOMRect = messageElement.getBoundingClientRect();
+
+      transcript.scrollTo({
+        top: getTranscriptScrollTop({
+          scrollTop: transcript.scrollTop,
+          scrollHeight: transcript.scrollHeight,
+          clientHeight: transcript.clientHeight,
+          containerTop: transcriptRect.top,
+          targetTop: messageRect.top,
+          targetHeight: messageRect.height,
+        }),
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
+      setHighlightedMessageId(messageId);
+      highlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedMessageId(undefined);
+        highlightTimerRef.current = undefined;
+      }, RESOURCE_HIGHLIGHT_DURATION_MS);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+
+      if (highlightTimerRef.current !== undefined) {
+        window.clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = undefined;
+      }
+    };
+  }, [resourceNavigationTarget]);
 
   return (
 
@@ -735,11 +791,18 @@ export function ChatTranscript({ messages, chatId }: ChatTranscriptProps): React
       {messages.map((message: ChatMessage) => (
 
         <article
-
-          className={`chat-message chat-message-${message.role} chat-message-${message.status}`}
-
+          className={`chat-message chat-message-${message.role} chat-message-${message.status}${
+            highlightedMessageId === message.id ? " chat-message-resource-highlight" : ""
+          }`}
           key={message.id}
-
+          data-message-id={message.id}
+          ref={(element: HTMLElement | null) => {
+            if (element === null) {
+              messageRefs.current.delete(message.id);
+            } else {
+              messageRefs.current.set(message.id, element);
+            }
+          }}
         >
 
           <div className="message-content">
@@ -772,9 +835,7 @@ export function ChatTranscript({ messages, chatId }: ChatTranscriptProps): React
         </article>
 
       ))}
-
-      <div className="chat-scroll-anchor" ref={scrollAnchorRef} aria-hidden="true" />
-
+      <div className="chat-scroll-anchor" aria-hidden="true" />
     </section>
 
   );

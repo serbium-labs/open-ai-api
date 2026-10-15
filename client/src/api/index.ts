@@ -88,6 +88,16 @@ export async function renameChat(
   return body.chat;
 }
 
+export async function deleteChat(chatId: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  const response: Response = await fetchImpl(`/api/chats/${encodeURIComponent(chatId)}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    await readJsonResponse<Record<string, never>>(response);
+  }
+}
+
 export async function submitChatMessage(
   chatId: string,
   prompt: string,

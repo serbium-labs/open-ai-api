@@ -768,6 +768,7 @@ export function PromptForm({
                 type="button"
                 aria-label="Remove attachment"
                 data-tooltip="Remove attachment"
+                data-tooltip-placement="top"
                 onClick={removeAttachment}
               >
                 <Icon name="remove" />
@@ -814,9 +815,8 @@ export function PromptForm({
             }
             aria-label="Attach file"
             data-tooltip="Attach file"
-            onClick={() =>
-              fileInputRef.current?.click()
-            }
+            data-tooltip-placement="top"
+            onClick={() => fileInputRef.current?.click()}
           >
             <Paperclip size={20} strokeWidth={1.75} aria-hidden="true" />
           </button>
@@ -845,6 +845,7 @@ export function PromptForm({
                   ? "Requesting microphone access"
                 : "Record voice message"
             }
+            data-tooltip-placement="top"
             onClick={handleRecordButton}
           >
             <Icon name={isRecording ? "stop" : "microphone"} />
@@ -903,6 +904,7 @@ export function PromptForm({
             disabled={isSubmitDisabled}
             aria-label={submitTooltip}
             data-tooltip={submitTooltip}
+            data-tooltip-placement="top"
           >
             <Icon name="send" />
           </button>

@@ -354,6 +354,23 @@ export function createChatsRouter(
     },
   );
 
+  router.delete(
+    "/:chatId",
+    async (
+      request: Request<{ chatId: string }>,
+      response: Response<void | ErrorResponse>,
+    ) => {
+      try {
+        await inChatOrder(request.params.chatId, () => chatArchiveService.deleteChat(request.params.chatId));
+        response.status(HTTP_STATUS.noContent).send();
+      } catch (error: unknown) {
+        response.status(isNotFound(error) ? HTTP_STATUS.notFound : HTTP_STATUS.internalServerError).json({
+          error: errorMessage(error),
+        });
+      }
+    },
+  );
+
   router.post(
     "/:chatId/messages",
     upload.single("attachment"),
