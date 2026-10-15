@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "
 
 import { CopyButton } from "@components/CopyButton";
 
+import { AudioPlayer } from "@components/AudioPlayer";
 import { HighlightedCode } from "@components/HighlightedCode";
 import type { ChatAttachment } from "@models";
 import {
@@ -14,6 +15,12 @@ export type ChatMessageRole = "user" | "assistant";
 
 export type ChatMessageStatus = "complete" | "pending" | "error";
 
+export type ChatMessageAttachment = ChatAttachment & {
+
+  previewUrl?: string;
+
+};
+
 export type ChatMessage = {
 
   id: string;
@@ -24,7 +31,7 @@ export type ChatMessage = {
 
   status: ChatMessageStatus;
 
-  attachments: ChatAttachment[];
+  attachments: ChatMessageAttachment[];
 
 };
 
@@ -168,7 +175,15 @@ export function parseMessageContent(content: string): MessageSegment[] {
 
 }
 
-export function appendPromptTurn(messages: ChatMessage[], prompt: string): AppendPromptTurnResult {
+export function appendPromptTurn(
+
+  messages: ChatMessage[],
+
+  prompt: string,
+
+  attachments: ChatMessageAttachment[] = [],
+
+): AppendPromptTurnResult {
 
   const nextIndex: number = messages.length + 1;
 
@@ -187,7 +202,7 @@ export function appendPromptTurn(messages: ChatMessage[], prompt: string): Appen
         role: "user",
         content: prompt,
         status: "complete",
-        attachments: [],
+        attachments,
       },
 
       {
@@ -528,22 +543,60 @@ function attachmentIcon(attachment: ChatAttachment): string {
 }
 
 function renderAttachment(
-  attachment: ChatAttachment,
+  attachment: ChatMessageAttachment,
   chatId: string | undefined,
   key: string,
 ): ReactNode {
-  if (chatId === undefined) {
+  if (attachment.mimeType.startsWith("audio/")) {
+    const audioUrl: string | undefined =
+      attachment.previewUrl ??
+      (chatId === undefined
+        ? undefined
+        : attachmentUrl(chatId, attachment.path));
+
     return (
-      <div className="message-attachment-file" key={key}>
-        <span className="message-attachment-icon" aria-hidden="true">
-          {attachmentIcon(attachment)}
+      <div
+        className="message-attachment-file message-audio-attachment"
+        key={key}
+      >
+        {audioUrl === undefined ? (
+          <span className="attachment-status">
+            Audio preview unavailable
+          </span>
+        ) : (
+          <AudioPlayer
+            src={audioUrl}
+            label={attachment.name}
+          />
+        )}
+
+        <span className="message-attachment-name">
+          {attachment.name}
         </span>
-        <span className="message-attachment-name">{attachment.name}</span>
       </div>
     );
   }
 
-  const url: string = attachmentUrl(chatId, attachment.path);
+  if (chatId === undefined && attachment.previewUrl === undefined) {
+    return (
+      <div className="message-attachment-file" key={key}>
+        <span
+          className="message-attachment-icon"
+          aria-hidden="true"
+        >
+          {attachmentIcon(attachment)}
+        </span>
+
+        <span className="message-attachment-name">
+          {attachment.name}
+        </span>
+      </div>
+    );
+  }
+
+  const url: string =
+    attachment.previewUrl ??
+    attachmentUrl(chatId as string, attachment.path);
 
   if (attachment.mimeType.startsWith("image/")) {
     return (
@@ -576,10 +629,16 @@ function renderAttachment(
       rel="noreferrer"
       key={key}
     >
-      <span className="message-attachment-icon" aria-hidden="true">
+      <span
+        className="message-attachment-icon"
+        aria-hidden="true"
+      >
         {attachmentIcon(attachment)}
       </span>
-      <span className="message-attachment-name">{attachment.name}</span>
+
+      <span className="message-attachment-name">
+        {attachment.name}
+      </span>
     </a>
   );
 }
@@ -751,7 +810,7 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
             {message.attachments.length > 0 ? (
               <div className="message-attachments">
                 {message.attachments.map(
-                  (attachment: ChatAttachment, index: number) =>
+                  (attachment: ChatMessageAttachment, index: number) =>
                     renderAttachment(
                       attachment,
                       chatId,
