@@ -12,6 +12,7 @@ export const HTTP_STATUS = {
   ok: 200,
   noContent: 204,
   badRequest: 400,
+  payloadTooLarge: 413,
   notFound: 404,
   internalServerError: 500,
 } as const;

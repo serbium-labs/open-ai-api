@@ -35,6 +35,69 @@ it works with the same ChatGPT account already signed in to Codex.
 
 - Node.js 18 or later
 - Codex CLI authenticated with your ChatGPT account
+- `ffmpeg` for safe audio decoding and normalization
+- `whisper.cpp` plus a local GGML Whisper model for voice messages
+
+## Local voice transcription on macOS Apple Silicon
+
+Voice messages are transcribed entirely on the machine running the server. No
+speech API, paid service, API key, or audio upload to a transcription provider
+is used. The server accepts WebM, Ogg, M4A/MP4, WAV, MP3, and FLAC audio up to
+20 MB, converts it to 16 kHz mono WAV with `ffmpeg`, and runs `whisper-cli`.
+
+From this project's root, install the build and conversion tools with
+[Homebrew](https://brew.sh/):
+
+```bash
+brew install cmake ffmpeg
+```
+
+Build the official [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+source in a sibling directory. Its default macOS build uses Apple Silicon
+acceleration:
+
+```bash
+git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
+cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ../whisper.cpp/build --config Release -j
+```
+
+Download the multilingual `base` model to the path used by this app:
+
+```bash
+mkdir -p models
+curl --fail --location \
+  --output models/ggml-base.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+```
+
+Set the locally built executable path in the terminal that starts the app:
+
+```bash
+export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
+```
+
+Verify all three local requirements before starting the server:
+
+```bash
+ffmpeg -version | head -n 1
+"$WHISPER_CPP_PATH" --help
+shasum -a 1 models/ggml-base.bin
+```
+
+The expected SHA-1 for `ggml-base.bin` is
+`465707469ff3a37a2b9b8d8f89f2f99de7299dac`. The model is ignored by Git.
+If you store it elsewhere, set an absolute or project-relative path:
+
+```bash
+export WHISPER_MODEL_PATH=/absolute/path/to/ggml-base.bin
+```
+
+`FFMPEG_PATH` can override the `ffmpeg` executable, and
+`AUDIO_TRANSCRIPTION_TIMEOUT_MS` can override the 120-second timeout. Missing
+tools, an unreadable model, unsupported audio bytes, empty speech, command
+failures, and timeouts are returned as errors; the app does not send a fake or
+empty transcript to Codex.
 
 ## Setup
 
@@ -75,6 +138,13 @@ it works with the same ChatGPT account already signed in to Codex.
 Enter a prompt in the chat composer and send it with Enter or the send button.
 Shift+Enter inserts a new line. The composer is disabled while a request is
 running, and the pending model message shows a thinking indicator.
+
+To use voice, select the microphone, speak a question, stop the recording, and
+send it. The browser chooses a supported MediaRecorder format and the app
+checks the recorded container bytes before naming the file. The saved user
+message contains the local transcript and retains the original recording for
+playback. If the browser labels Ogg bytes as WebM, the server stores those
+unchanged bytes with the correct `.ogg` extension and `audio/ogg` MIME type.
 
 The left sidebar lists saved chats. You can switch between chats, start a new
 chat after the current chat has at least one message, and rename existing
@@ -330,6 +400,10 @@ chat requests handled by this app.
 | --- | --- | --- |
 | `PORT` | No | Express server port. Defaults to `3001`. |
 | `OPENAI_API_KEY` | No | Optional API-key authentication instead of the stored Codex session. |
+| `WHISPER_CPP_PATH` | For voice | Path to `whisper-cli`. Defaults to `whisper-cli` on `PATH`. |
+| `WHISPER_MODEL_PATH` | For voice | GGML model path. Defaults to `models/ggml-base.bin`. |
+| `FFMPEG_PATH` | For voice | Path to `ffmpeg`. Defaults to `ffmpeg` on `PATH`. |
+| `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | Per-command audio timeout. Defaults to `120000`. |
 
 ## License
 

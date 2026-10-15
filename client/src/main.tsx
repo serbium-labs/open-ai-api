@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { App } from "@components/App";
 import "./styles.css";
+import "./styles/tooltips.css";
 
 const rootElement: HTMLElement | null = document.querySelector("#root");
 
