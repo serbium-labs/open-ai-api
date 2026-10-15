@@ -40,10 +40,15 @@ function getErrorMessage(error: unknown, fallback: string): string {
 function sortedSummariesWith(chat: ChatDetail, summaries: ChatSummary[]): ChatSummary[] {
   const nextSummaries: ChatSummary[] = [
     chat,
-    ...summaries.filter((summary: ChatSummary) => summary.id !== chat.id),
+    ...summaries.filter(
+      (summary: ChatSummary) => summary.id !== chat.id,
+    ),
   ];
 
-  return nextSummaries.sort((left: ChatSummary, right: ChatSummary) => right.updatedAt.localeCompare(left.updatedAt));
+  return nextSummaries.sort(
+    (left: ChatSummary, right: ChatSummary) =>
+      right.updatedAt.localeCompare(left.updatedAt),
+  );
 }
 
 function isMobileViewport(): boolean {
@@ -64,6 +69,7 @@ export function App(): ReactElement {
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const { codeStatus, currentChatId, files, messages } = conversationState;
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [sidebarState, dispatchSidebarAction] = useReducer(
     reduceSidebarState,
     undefined,
@@ -112,7 +118,9 @@ export function App(): ReactElement {
         setChatSummaries(summaries);
       } catch (error: unknown) {
         if (isMounted) {
-          setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
+          setChatListStatus(
+            getErrorMessage(error, UI_TEXT.unexpectedError),
+          );
         }
       }
     }
@@ -147,14 +155,83 @@ export function App(): ReactElement {
       return;
     }
 
-    const title: string | null = window.prompt(UI_TEXT.renamePrompt, chat.title);
+    const title: string | null = window.prompt(
+      UI_TEXT.renamePrompt,
+      chat.title,
+    );
 
     if (title === null || title.trim() === "") {
       return;
     }
 
-    const renamedChat: ChatDetail = await renameChat(chat.id, title.trim());
-    setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(renamedChat, summaries));
+    const renamedChat: ChatDetail = await renameChat(
+      chat.id,
+      title.trim(),
+    );
+
+    setChatSummaries((summaries: ChatSummary[]) =>
+      sortedSummariesWith(renamedChat, summaries),
+    );
+  }
+
+  async function handleSubmit(
+    submittedPrompt: string,
+    attachment: File | null,
+  ): Promise<boolean> {
+    const nextTurn: AppendPromptTurnResult | null = attachment === null
+      ? appendPromptTurn(messages, submittedPrompt)
+      : null;
+
+    if (nextTurn !== null) {
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        messages: nextTurn.messages,
+        codeStatus: UI_TEXT.loadingCode,
+      }));
+      setPrompt("");
+    }
+
+    setSubmitError(null);
+    if (nextTurn === null) {
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        codeStatus: UI_TEXT.loadingCode,
+      }));
+    }
+    setIsRunning(true);
+
+    try {
+      const chat: ChatDetail =
+        currentChatId === undefined
+          ? await createChat(undefined)
+          : await fetchChat(currentChatId);
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        currentChatId: chat.id,
+      }));
+      const result = await submitChatMessage(chat.id, submittedPrompt, attachment);
+
+      setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
+      setConversationState(conversationStateFromChat(result.chat));
+      setPrompt("");
+      return true;
+    } catch (error: unknown) {
+      const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
+
+      setConversationState((currentState: ConversationState) => ({
+        ...currentState,
+        messages: nextTurn === null
+          ? currentState.messages
+          : failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
+        codeStatus: getCodeStatus(currentState.files),
+      }));
+      if (nextTurn === null) {
+        setSubmitError(message);
+      }
+      return false;
+    } finally {
+      setIsRunning(false);
+    }
   }
 
   async function handleDeleteChat(chat: ChatSummary): Promise<void> {
@@ -182,42 +259,6 @@ export function App(): ReactElement {
     }
   }
 
-  async function handleSubmit(submittedPrompt: string): Promise<void> {
-    const nextTurn: AppendPromptTurnResult = appendPromptTurn(messages, submittedPrompt);
-
-    setConversationState((currentState: ConversationState) => ({
-      ...currentState,
-      messages: nextTurn.messages,
-      codeStatus: UI_TEXT.loadingCode,
-    }));
-    setPrompt("");
-    setIsRunning(true);
-
-    try {
-      const chat: ChatDetail =
-        currentChatId === undefined
-          ? await createChat(undefined)
-          : await fetchChat(currentChatId);
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        currentChatId: chat.id,
-      }));
-      const result = await submitChatMessage(chat.id, submittedPrompt);
-
-      setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
-      setConversationState(conversationStateFromChat(result.chat));
-    } catch (error: unknown) {
-      const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
-
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        messages: failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
-        codeStatus: getCodeStatus(currentState.files),
-      }));
-    } finally {
-      setIsRunning(false);
-    }
-  }
 
   function toggleChatHistory(): void {
     dispatchSidebarAction({ type: "toggleChatHistory" });
@@ -237,9 +278,13 @@ export function App(): ReactElement {
   return (
     <>
       {isChatHistoryOpen ? (
-        <aside className="chat-history-sidebar" aria-label="Saved chats">
+        <aside
+          className="chat-history-sidebar"
+          aria-label="Saved chats"
+        >
           <div className="chat-history-header">
             <h2>{UI_TEXT.chatHistoryTitle}</h2>
+
             <button
               className="chat-history-new-button"
               type="button"
@@ -249,13 +294,26 @@ export function App(): ReactElement {
               data-tooltip-placement="left"
               onClick={handleNewChat}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                focusable="false"
+              >
                 <path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
               </svg>
             </button>
           </div>
-          {chatListStatus ? <p className="chat-history-status">{chatListStatus}</p> : null}
-          <nav className="chat-history-list" aria-label="Chat history">
+
+          {chatListStatus ? (
+            <p className="chat-history-status">
+              {chatListStatus}
+            </p>
+          ) : null}
+
+          <nav
+            className="chat-history-list"
+            aria-label="Chat history"
+          >
             {chatSummaries.map((chat: ChatSummary) => (
               <div
                 className={`chat-history-item${chat.id === currentChatId ? " chat-history-item-active" : ""}${
@@ -275,6 +333,7 @@ export function App(): ReactElement {
                   <span>{chat.title}</span>
                   <small>{chat.date}</small>
                 </button>
+
                 <button
                   className="chat-history-rename-button"
                   type="button"
@@ -287,7 +346,11 @@ export function App(): ReactElement {
                     void handleRenameChat(chat);
                   }}
                 >
-                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    focusable="false"
+                  >
                     <path d="m4 16.6-.7 4.1 4.1-.7L18.7 8.7l-3.4-3.4L4 16.6Zm13.2-12.7 3 3 .8-.8a2.1 2.1 0 0 0-3-3l-.8.8Z" />
                   </svg>
                 </button>
@@ -312,65 +375,123 @@ export function App(): ReactElement {
           </nav>
         </aside>
       ) : null}
+
       <button
-        className={`chat-history-toggle${isChatHistoryOpen ? " chat-history-toggle-open" : ""}`}
+        className={`chat-history-toggle${
+          isChatHistoryOpen
+            ? " chat-history-toggle-open"
+            : ""
+        }`}
         type="button"
-        aria-label={isChatHistoryOpen ? UI_TEXT.hideChatHistoryButton : UI_TEXT.chatHistoryButton}
+        aria-label={
+          isChatHistoryOpen
+            ? UI_TEXT.hideChatHistoryButton
+            : UI_TEXT.chatHistoryButton
+        }
         aria-expanded={isChatHistoryOpen}
         data-tooltip={isChatHistoryOpen ? UI_TEXT.hideChatHistoryTooltip : UI_TEXT.chatHistoryTooltip}
         data-tooltip-placement="right"
         onClick={toggleChatHistory}
       >
         {isChatHistoryOpen ? (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />
           </svg>
         ) : (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13ZM6.5 5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H10V5H6.5ZM12 5v14h5.5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5H12Z" />
           </svg>
         )}
       </button>
-      <main className={`app-shell${isChatHistoryOpen ? " app-shell-with-history" : ""}${isResourcesOpen ? " app-shell-with-resources" : ""}`}>
+
+      <main
+        className={`app-shell${
+          isChatHistoryOpen
+            ? " app-shell-with-history"
+            : ""
+        }${
+          isResourcesOpen
+            ? " app-shell-with-resources"
+            : ""
+        }`}
+      >
         <div className="chat-layout">
           <section
-            className={`chat-column${messages.length === 0 ? " chat-column-empty" : " chat-column-active"}`}
+            className={`chat-column${
+              messages.length === 0
+                ? " chat-column-empty"
+                : " chat-column-active"
+            }`}
             aria-label="Chat"
           >
             <ChatTranscript
               messages={messages}
+              chatId={currentChatId}
               resourceNavigationTarget={resourceNavigationTarget}
             />
             <PromptForm
               prompt={prompt}
               isRunning={isBusy}
+              submitError={submitError}
               onPromptChange={setPrompt}
-              onSubmit={(submittedPrompt: string) => {
-                void handleSubmit(submittedPrompt);
-              }}
+              onSubmit={(
+                submittedPrompt: string,
+                attachment: File | null,
+              ) =>
+                handleSubmit(
+                  submittedPrompt,
+                  attachment,
+                )
+              }
             />
           </section>
         </div>
       </main>
+
       <button
-        className={`resources-toggle${isResourcesOpen ? " resources-toggle-open" : ""}`}
+        className={`resources-toggle${
+          isResourcesOpen
+            ? " resources-toggle-open"
+            : ""
+        }`}
         type="button"
-        aria-label={isResourcesOpen ? UI_TEXT.hideResourcesButton : UI_TEXT.resourcesButton}
+        aria-label={
+          isResourcesOpen
+            ? UI_TEXT.hideResourcesButton
+            : UI_TEXT.resourcesButton
+        }
         aria-expanded={isResourcesOpen}
         data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
         data-tooltip-placement="left"
         onClick={toggleResources}
       >
         {isResourcesOpen ? (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z" />
           </svg>
         ) : (
-          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
             <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13ZM6.5 5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5H10V5H6.5ZM12 5v14h5.5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5H12Z" />
           </svg>
         )}
       </button>
+
       {isResourcesOpen ? (
         <aside className="resources-sidebar" aria-label="Chat resources">
           <CodeFiles

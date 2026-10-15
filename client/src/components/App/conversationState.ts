@@ -34,6 +34,7 @@ export function conversationStateFromChat(chat: ChatDetail): ConversationState {
       role: message.role,
       content: message.content,
       status: "complete",
+      attachments: message.attachments,
     })),
     files: chat.resources,
     codeStatus: getCodeStatus(chat.resources),

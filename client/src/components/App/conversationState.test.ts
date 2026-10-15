@@ -58,6 +58,7 @@ test("manual selection fetches and restores the requested conversation", async (
         content: "Open the saved chat",
         createdAt: "2026-10-09T08:01:00.000Z",
         resources: [],
+        attachments: [],
       },
     ],
     resources: [
@@ -87,6 +88,7 @@ test("manual selection fetches and restores the requested conversation", async (
         role: "user",
         content: "Open the saved chat",
         status: "complete",
+        attachments: [],
       },
     ],
     files: selectedChat.resources,

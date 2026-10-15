@@ -3,6 +3,12 @@ export type CodeFile = {
   content: string;
 };
 
+export type ChatAttachment = {
+  name: string;
+  mimeType: string;
+  path: string;
+};
+
 export type ChatResource = CodeFile & {
   id: string;
   messageId: string;
@@ -16,6 +22,7 @@ export type PersistedChatMessage = {
   content: string;
   createdAt: string;
   resources: string[];
+  attachments: ChatAttachment[];
 };
 
 export type ChatSummary = {

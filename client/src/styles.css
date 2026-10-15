@@ -129,19 +129,16 @@ textarea {
   background: var(--color-surface-muted-hover);
   color: var(--color-text);
 }
-
 .chat-history-new-button:hover:not(:disabled),
 .chat-history-new-button:focus-visible {
   background: var(--color-text);
   color: var(--color-text-inverse);
   border-color: var(--color-text);
 }
-
 .chat-history-new-button:disabled {
   color: var(--color-text-muted);
   opacity: 1;
 }
-
 .chat-history-status {
   margin-bottom: 10px;
   color: var(--color-text-muted);
@@ -175,11 +172,9 @@ textarea {
 .chat-history-item-locked {
   background: rgba(216, 216, 211, 0.28);
 }
-
 .chat-history-item:hover:not(.chat-history-item-locked) {
   background: var(--color-surface-muted-hover);
 }
-
 .chat-history-open-button {
   display: grid;
   justify-items: start;
@@ -227,32 +222,27 @@ textarea {
   color: var(--color-text-muted);
   font-size: 11px;
 }
-
 .chat-history-rename-button,
 .chat-history-delete-button {
   width: 30px;
   height: 30px;
   opacity: 1;
 }
-
 .chat-history-rename-button > svg,
 .chat-history-delete-button > svg {
   opacity: 0.58;
 }
-
 .chat-history-item:hover .chat-history-rename-button > svg,
 .chat-history-rename-button:focus-visible > svg,
 .chat-history-item:hover .chat-history-delete-button > svg,
 .chat-history-delete-button:focus-visible > svg {
   opacity: 1;
 }
-
 .chat-history-rename-button:disabled,
 .chat-history-delete-button:disabled {
   cursor: not-allowed;
   opacity: 1;
 }
-
 .chat-history-item .chat-history-rename-button:disabled > svg,
 .chat-history-item .chat-history-delete-button:disabled > svg {
   opacity: 0.34;
@@ -351,14 +341,12 @@ h1 {
   width: min(var(--chat-content-width), 100%);
   margin-bottom: 12px;
 }
-
 .field-label {
   font-weight: 700;
 }
-
 .prompt-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   border: 1px solid var(--color-border);
@@ -366,14 +354,22 @@ h1 {
   padding: 10px 10px 10px 18px;
   background: var(--color-surface);
   box-shadow: var(--shadow-soft);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
-
 .prompt-composer:focus-within {
   border-color: var(--color-accent);
   box-shadow: var(--shadow-focus), var(--shadow-soft);
 }
-
+.prompt-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
 textarea {
   min-height: 44px;
   max-height: 180px;
@@ -386,20 +382,16 @@ textarea {
   font-size: 16px;
   line-height: 1.45;
 }
-
 textarea:focus {
   outline: 0;
 }
-
 textarea::placeholder {
   color: var(--color-text-muted);
 }
-
 textarea:disabled {
   cursor: wait;
   color: var(--color-text-muted);
 }
-
 button {
   justify-self: start;
   border: 0;
@@ -408,20 +400,94 @@ button {
   background: var(--color-accent);
   color: var(--color-text-inverse);
   cursor: pointer;
-  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
-
 button:hover:not(:disabled) {
   background: var(--color-accent-hover);
   transform: translateY(-1px);
   box-shadow: var(--shadow-soft);
 }
-
 button:disabled {
   cursor: not-allowed;
   opacity: 0.7;
 }
-
+.attachment-input {
+  display: none;
+}
+.attachment-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.attachment-button:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+.attachment-button:disabled {
+  cursor: wait;
+}
+.attachment-preview {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+.attachment-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+}
+.attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-status {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.attachment-remove-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.attachment-remove-button:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: none;
+  transform: none;
+}
 .send-button {
   display: inline-grid;
   place-items: center;
@@ -432,23 +498,19 @@ button:disabled {
   background: var(--color-accent);
   line-height: 0;
 }
-
 .send-button:disabled {
   background: var(--color-disabled);
   color: var(--color-text-muted);
   opacity: 1;
 }
-
 .send-button-running:disabled {
   cursor: wait;
 }
-
 .send-button svg {
   width: 20px;
   height: 20px;
   fill: currentColor;
 }
-
 .copy-button {
   display: inline-grid;
   place-items: center;
@@ -596,13 +658,11 @@ button:disabled {
   border-color: var(--color-error-border);
   background: var(--color-error-surface);
 }
-
 .chat-message-resource-highlight .message-content {
   border-color: var(--color-accent);
   background: var(--color-surface-raised);
   box-shadow: 0 0 0 2px var(--color-accent-soft), var(--shadow-soft);
 }
-
 .message-content p {
   white-space: pre-wrap;
 }
@@ -775,7 +835,6 @@ button:disabled {
   border-bottom: 1px solid var(--color-border);
   padding: 8px 10px 8px 12px;
 }
-
 .code-file-link {
   overflow: hidden;
   border: 0;
@@ -785,17 +844,14 @@ button:disabled {
   color: inherit;
   text-align: left;
 }
-
 .code-file-link:hover:not(:disabled) {
   background: transparent;
   box-shadow: none;
   transform: none;
 }
-
 .code-file-link:hover:not(:disabled) h3 {
   color: var(--color-accent);
 }
-
 .code-file-link:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -913,7 +969,6 @@ pre code {
   height: 20px;
   fill: currentColor;
 }
-
 .resources-sidebar {
   position: fixed;
   top: 0;
@@ -1090,4 +1145,17 @@ pre code {
     max-width: 100%;
     font-size: 14px;
   }
+}
+/* Issue #40: keep image filename below its preview */
+.message-attachment-image-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.message-attachment-image-container .message-attachment-caption {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
