@@ -6,9 +6,46 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   appendPromptTurn,
   ChatTranscript,
+  isSmallImage,
   isSystemVoiceFilename,
+  SMALL_IMAGE_MAX_DIMENSION_PX,
   type ChatMessageAttachment,
 } from "./index";
+
+test("small image detection only falls back when both dimensions are tiny", () => {
+  assert.equal(SMALL_IMAGE_MAX_DIMENSION_PX, 96);
+  assert.equal(isSmallImage({ width: 96, height: 96 }), true);
+  assert.equal(isSmallImage({ width: 97, height: 96 }), false);
+  assert.equal(isSmallImage({ width: 32, height: 600 }), false);
+  assert.equal(isSmallImage({ width: 1200, height: 40 }), false);
+});
+
+test("image attachments render an intrinsic-size-aware preview", () => {
+  const markup: string = renderToStaticMarkup(
+    createElement(ChatTranscript, {
+      chatId: "image-chat",
+      messages: [
+        {
+          id: "message-image",
+          role: "user",
+          content: "",
+          status: "complete",
+          attachments: [
+            {
+              name: "landscape.png",
+              mimeType: "image/png",
+              path: "landscape.png",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  assert.match(markup, /class="message-attachment-image"/);
+  assert.match(markup, /loading="lazy"/);
+  assert.match(markup, />landscape\.png<\/span>/);
+});
 
 test("appendPromptTurn puts the user attachment before the pending assistant", () => {
   const attachment: ChatMessageAttachment = {

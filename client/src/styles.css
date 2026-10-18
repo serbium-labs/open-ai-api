@@ -1400,12 +1400,41 @@ pre code {
 }
 
 /* Issue #40: keep image filename below its preview */
+.message-attachments {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .message-attachment-image-container {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   min-width: 0;
+  max-width: 100%;
+}
+
+.message-attachment-image-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+
+.message-attachment-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(480px, 60vh);
+  object-fit: contain;
 }
 .message-attachment-image-container .message-attachment-caption {
   display: block;

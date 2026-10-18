@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
 
 import { CopyButton } from "@components/CopyButton";
 
@@ -74,6 +81,19 @@ export type ChatTranscriptProps = {
 
 const FENCE_PATTERN: RegExp = /```([^\r\n`]*)\r?\n([\s\S]*?)\r?\n```/g;
 const RESOURCE_HIGHLIGHT_DURATION_MS: number = 2_000;
+export const SMALL_IMAGE_MAX_DIMENSION_PX: number = 96;
+
+type ImageDimensions = {
+  width: number;
+  height: number;
+};
+
+export function isSmallImage({ width, height }: ImageDimensions): boolean {
+  return (
+    width <= SMALL_IMAGE_MAX_DIMENSION_PX &&
+    height <= SMALL_IMAGE_MAX_DIMENSION_PX
+  );
+}
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -542,6 +562,77 @@ function attachmentIcon(attachment: ChatAttachment): string {
   return "📄";
 }
 
+function FileAttachment({
+  attachment,
+  url,
+}: {
+  attachment: ChatMessageAttachment;
+  url?: string;
+}): ReactElement {
+  const content: ReactNode = (
+    <>
+      <span className="message-attachment-icon" aria-hidden="true">
+        {attachmentIcon(attachment)}
+      </span>
+      <span className="message-attachment-name">{attachment.name}</span>
+    </>
+  );
+
+  return url === undefined ? (
+    <div className="message-attachment-file">{content}</div>
+  ) : (
+    <a
+      className="message-attachment-file"
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {content}
+    </a>
+  );
+}
+
+function ImageAttachment({
+  attachment,
+  url,
+}: {
+  attachment: ChatMessageAttachment;
+  url: string;
+}): ReactElement {
+  const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
+
+  function handleLoad(event: SyntheticEvent<HTMLImageElement>): void {
+    const image: HTMLImageElement = event.currentTarget;
+    setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+  }
+
+  if (dimensions !== null && isSmallImage(dimensions)) {
+    return <FileAttachment attachment={attachment} url={url} />;
+  }
+
+  return (
+    <div className="message-attachment-image-container">
+      <a
+        className="message-attachment-image-link"
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <img
+          className="message-attachment-image"
+          src={url}
+          alt={attachment.name}
+          loading="lazy"
+          onLoad={handleLoad}
+          width={dimensions?.width}
+          height={dimensions?.height}
+        />
+      </a>
+      <span className="message-attachment-caption">{attachment.name}</span>
+    </div>
+  );
+}
+
 export function isSystemVoiceFilename(name: string): boolean {
   return /^voice-message-\d+\.(?:m4a|ogg|webm)$/i.test(name);
 }
@@ -584,20 +675,7 @@ function renderAttachment(
   }
 
   if (chatId === undefined && attachment.previewUrl === undefined) {
-    return (
-      <div className="message-attachment-file" key={key}>
-        <span
-          className="message-attachment-icon"
-          aria-hidden="true"
-        >
-          {attachmentIcon(attachment)}
-        </span>
-
-        <span className="message-attachment-name">
-          {attachment.name}
-        </span>
-      </div>
-    );
+    return <FileAttachment attachment={attachment} key={key} />;
   }
 
   const url: string =
@@ -605,48 +683,10 @@ function renderAttachment(
     attachmentUrl(chatId as string, attachment.path);
 
   if (attachment.mimeType.startsWith("image/")) {
-    return (
-      <div className="message-attachment-image-container" key={key}>
-        <a
-          className="message-attachment-image-link"
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <img
-            className="message-attachment-image"
-            src={url}
-            alt={attachment.name}
-            loading="lazy"
-          />
-        </a>
-        <span className="message-attachment-caption">
-          {attachment.name}
-        </span>
-      </div>
-    );
+    return <ImageAttachment attachment={attachment} url={url} key={key} />;
   }
 
-  return (
-    <a
-      className="message-attachment-file"
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      key={key}
-    >
-      <span
-        className="message-attachment-icon"
-        aria-hidden="true"
-      >
-        {attachmentIcon(attachment)}
-      </span>
-
-      <span className="message-attachment-name">
-        {attachment.name}
-      </span>
-    </a>
-  );
+  return <FileAttachment attachment={attachment} url={url} key={key} />;
 }
 
 function ThinkingIndicator(): ReactElement {
