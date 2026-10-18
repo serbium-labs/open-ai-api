@@ -617,6 +617,8 @@ input[type="range"]:focus-visible {
 
 .chat-transcript {
   display: flex;
+  position: relative;
+  z-index: 1;
   flex-direction: column;
   gap: 12px;
   align-self: stretch;
