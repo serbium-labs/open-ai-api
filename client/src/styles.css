@@ -1313,6 +1313,11 @@ pre code {
   min-width: 0;
 }
 
+.audio-play-button[hidden],
+.audio-progress-group[hidden] {
+  display: none;
+}
+
 .audio-waveform {
   position: relative;
   width: 100%;
@@ -1417,6 +1422,7 @@ pre code {
 }
 
 .message-attachment-image-link {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1426,6 +1432,61 @@ pre code {
   overflow: hidden;
   border-radius: 10px;
   background: var(--color-surface-muted);
+}
+
+.message-resource-skeleton {
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.message-resource-skeleton::after {
+  display: block;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-accent-soft),
+    transparent
+  );
+  animation: resource-skeleton-shimmer 1.2s ease-in-out infinite;
+  content: "";
+}
+
+.message-image-skeleton {
+  width: min(320px, 62vw);
+  height: min(220px, 42vw);
+}
+
+.message-resource-loading .message-attachment-image {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.message-audio-skeleton {
+  grid-column: 1 / -1;
+  width: min(320px, 62vw);
+  height: 40px;
+}
+
+@keyframes resource-skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(225%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-resource-skeleton::after {
+    animation: none;
+  }
 }
 
 .message-attachment-image {

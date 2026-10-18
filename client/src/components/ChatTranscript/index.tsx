@@ -83,6 +83,14 @@ const FENCE_PATTERN: RegExp = /```([^\r\n`]*)\r?\n([\s\S]*?)\r?\n```/g;
 const RESOURCE_HIGHLIGHT_DURATION_MS: number = 2_000;
 export const SMALL_IMAGE_MAX_DIMENSION_PX: number = 96;
 
+export type ResourceLoadStatus = "loading" | "loaded" | "error";
+
+export function getResourceLoadStatus(
+  event: "load" | "error",
+): ResourceLoadStatus {
+  return event === "load" ? "loaded" : "error";
+}
+
 type ImageDimensions = {
   width: number;
   height: number;
@@ -600,10 +608,17 @@ function ImageAttachment({
   url: string;
 }): ReactElement {
   const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
+  const [loadStatus, setLoadStatus] =
+    useState<ResourceLoadStatus>("loading");
 
   function handleLoad(event: SyntheticEvent<HTMLImageElement>): void {
     const image: HTMLImageElement = event.currentTarget;
     setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+    setLoadStatus(getResourceLoadStatus("load"));
+  }
+
+  if (loadStatus === "error") {
+    return <FileAttachment attachment={attachment} url={url} />;
   }
 
   if (dimensions !== null && isSmallImage(dimensions)) {
@@ -613,17 +628,25 @@ function ImageAttachment({
   return (
     <div className="message-attachment-image-container">
       <a
-        className="message-attachment-image-link"
+        className={`message-attachment-image-link message-resource-${loadStatus}`}
         href={url}
         target="_blank"
         rel="noreferrer"
       >
+        {loadStatus === "loading" ? (
+          <span
+            className="message-resource-skeleton message-image-skeleton"
+            role="status"
+            aria-label={`Loading ${attachment.name}`}
+          />
+        ) : null}
         <img
           className="message-attachment-image"
           src={url}
           alt={attachment.name}
           loading="lazy"
           onLoad={handleLoad}
+          onError={() => setLoadStatus(getResourceLoadStatus("error"))}
           width={dimensions?.width}
           height={dimensions?.height}
         />
@@ -687,6 +710,18 @@ function renderAttachment(
   }
 
   return <FileAttachment attachment={attachment} url={url} key={key} />;
+}
+
+function attachmentRenderKey(
+  messageId: string,
+  attachment: ChatMessageAttachment,
+  chatId: string | undefined,
+  index: number,
+): string {
+  const resourceIdentity: string =
+    attachment.previewUrl ?? `${chatId ?? "local"}/${attachment.path}`;
+
+  return `${messageId}-attachment-${index}-${resourceIdentity}`;
 }
 
 function ThinkingIndicator(): ReactElement {
@@ -860,7 +895,12 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
                     renderAttachment(
                       attachment,
                       chatId,
-                      `${message.id}-attachment-${index}`,
+                      attachmentRenderKey(
+                        message.id,
+                        attachment,
+                        chatId,
+                        index,
+                      ),
                     ),
                 )}
               </div>

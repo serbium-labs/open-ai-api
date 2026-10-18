@@ -46,18 +46,13 @@ test("getAudioDuration reads finite and delayed seekable durations", () => {
   );
 });
 
-test("AudioPlayer renders custom accessible controls without native controls", () => {
+test("AudioPlayer renders a loader while metadata is pending", () => {
   const markup: string = renderToStaticMarkup(
     <AudioPlayer src="/voice.webm" label="voice-message.webm" />,
   );
 
-  assert.match(markup, /aria-label="Play voice"/);
-  assert.match(markup, /data-tooltip="Play voice"/);
-  assert.match(markup, /data-tooltip-placement="top"/);
-  assert.match(markup, /aria-label="Seek voice-message\.webm"/);
-  assert.match(markup, /role="slider"/);
-  assert.match(markup, /aria-busy="true"/);
-  assert.match(markup, /audio-waveform-progress/);
+  assert.match(markup, /message-audio-skeleton/);
+  assert.match(markup, /aria-label="Loading voice-message\.webm"/);
   assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
 });

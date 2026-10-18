@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   appendPromptTurn,
   ChatTranscript,
+  getResourceLoadStatus,
   isSmallImage,
   isSystemVoiceFilename,
   SMALL_IMAGE_MAX_DIMENSION_PX,
@@ -43,8 +44,15 @@ test("image attachments render an intrinsic-size-aware preview", () => {
   );
 
   assert.match(markup, /class="message-attachment-image"/);
+  assert.match(markup, /class="message-resource-skeleton message-image-skeleton"/);
+  assert.match(markup, /aria-label="Loading landscape\.png"/);
   assert.match(markup, /loading="lazy"/);
   assert.match(markup, />landscape\.png<\/span>/);
+});
+
+test("resource loading settles to content or an error fallback", () => {
+  assert.equal(getResourceLoadStatus("load"), "loaded");
+  assert.equal(getResourceLoadStatus("error"), "error");
 });
 
 test("appendPromptTurn puts the user attachment before the pending assistant", () => {
@@ -97,8 +105,8 @@ test("sent uploaded audio uses the shared waveform player", () => {
   );
 
   assert.match(markup, /src="blob:uploaded-audio"/);
-  assert.match(markup, /class="audio-waveform"/);
-  assert.match(markup, /role="slider"/);
+  assert.match(markup, /class="message-resource-skeleton message-audio-skeleton"/);
+  assert.match(markup, /aria-label="Loading meeting-recording\.mp3"/);
   assert.match(markup, />meeting-recording\.mp3<\/span>/);
   assert.doesNotMatch(markup, / controls=""/);
   assert.doesNotMatch(markup, /type="range"/);
@@ -130,8 +138,7 @@ test("persisted voice audio restores the waveform player without its generated f
     markup,
     /src="\/api\/chats\/chat%2Fwith%20spaces\/attachments\/uploads%2Fvoice%20message\.webm"/,
   );
-  assert.match(markup, /class="audio-waveform"/);
-  assert.match(markup, /aria-label="Seek voice-message-179231823782\.webm"/);
+  assert.match(markup, /class="message-resource-skeleton message-audio-skeleton"/);
   assert.doesNotMatch(
     markup,
     />voice-message-179231823782\.webm<\/span>/,

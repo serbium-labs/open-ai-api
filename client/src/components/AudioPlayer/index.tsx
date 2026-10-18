@@ -9,6 +9,8 @@ import {
 
 import { Icon } from "@components/Icon";
 
+type ResourceLoadStatus = "loading" | "loaded" | "error";
+
 export type AudioPlayerProps = {
   src: string;
   label: string;
@@ -97,6 +99,8 @@ export function AudioPlayer({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackError, setPlaybackError] = useState<string>("");
+  const [loadStatus, setLoadStatus] =
+    useState<ResourceLoadStatus>("loading");
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
@@ -108,6 +112,7 @@ export function AudioPlayer({
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
+    setLoadStatus("loading");
 
     return () => {
       audio?.pause();
@@ -222,6 +227,7 @@ export function AudioPlayer({
       : DEFAULT_WAVEFORM;
   const progress: number = getPlaybackProgress(currentTime, duration);
   const seekLabel: string = `Seek ${label}`;
+  const isLoading: boolean = loadStatus === "loading";
 
   return (
     <div className="audio-player">
@@ -231,10 +237,15 @@ export function AudioPlayer({
         preload="metadata"
         onCanPlay={() => {
           setPlaybackError("");
+          setLoadStatus("loaded");
           updateDuration();
         }}
         onDurationChange={updateDuration}
-        onLoadedMetadata={updateDuration}
+        onLoadedMetadata={() => {
+          setPlaybackError("");
+          setLoadStatus("loaded");
+          updateDuration();
+        }}
         onProgress={updateDuration}
         onTimeUpdate={updateCurrentTime}
         onPlay={() => setIsPlaying(true)}
@@ -246,12 +257,22 @@ export function AudioPlayer({
         onError={() => {
           setIsPlaying(false);
           setPlaybackError("Audio could not be loaded.");
+          setLoadStatus("error");
         }}
       />
 
+      {isLoading ? (
+        <span
+          className="message-resource-skeleton message-audio-skeleton"
+          role="status"
+          aria-label={`Loading ${label}`}
+        />
+      ) : null}
       <button
         className="audio-play-button icon-tooltip"
         type="button"
+        hidden={loadStatus !== "loaded"}
+        disabled={loadStatus !== "loaded"}
         aria-label={playbackLabel}
         data-tooltip={playbackLabel}
         data-tooltip-placement="top"
@@ -262,7 +283,10 @@ export function AudioPlayer({
         <Icon name={isPlaying ? "pause" : "play"} />
       </button>
 
-      <div className="audio-progress-group">
+      <div
+        className="audio-progress-group"
+        hidden={loadStatus !== "loaded"}
+      >
         <div
           className="audio-waveform"
           role="slider"

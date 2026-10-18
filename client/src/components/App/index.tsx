@@ -83,6 +83,7 @@ export function App(): ReactElement {
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
   const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
   const resourceNavigationRequestId = useRef<number>(0);
+  const openChatRequestId = useRef<number>(0);
   const isBusy: boolean = isRunning || deletingChatId !== undefined;
 
   useEffect(() => {
@@ -166,11 +167,25 @@ export function App(): ReactElement {
   }, []);
 
   async function openChat(chatId: string): Promise<void> {
-    if (isBusy || chatId === currentChatId) {
+    if (isBusy) {
       return;
     }
 
-    setConversationState(await loadConversation(chatId, fetchChat));
+    openChatRequestId.current += 1;
+
+    if (chatId === currentChatId) {
+      return;
+    }
+
+    const requestId: number = openChatRequestId.current;
+    const nextConversation: ConversationState =
+      await loadConversation(chatId, fetchChat);
+
+    if (requestId !== openChatRequestId.current) {
+      return;
+    }
+
+    setConversationState(nextConversation);
     setPrompt("");
   }
 
@@ -179,6 +194,7 @@ export function App(): ReactElement {
       return;
     }
 
+    openChatRequestId.current += 1;
     setConversationState(createFreshConversationState());
     setPrompt("");
   }
