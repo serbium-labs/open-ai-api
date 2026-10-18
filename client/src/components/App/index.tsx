@@ -26,6 +26,7 @@ import {
   loadConversation,
   type ConversationState,
 } from "./conversationState";
+import { advanceComposerSessionId } from "./composerSession";
 
 import {
   createInitialSidebarState,
@@ -67,6 +68,7 @@ function getLocalStorage(): Storage | undefined {
 
 export function App(): ReactElement {
   const optimisticAttachmentUrlsRef = useRef<Set<string>>(new Set());
+  const [composerSessionId, setComposerSessionId] = useState<number>(0);
   const [prompt, setPrompt] = useState<string>("");
   const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -187,6 +189,7 @@ export function App(): ReactElement {
 
     setConversationState(nextConversation);
     setPrompt("");
+    setComposerSessionId(advanceComposerSessionId);
   }
 
   function handleNewChat(): void {
@@ -197,6 +200,7 @@ export function App(): ReactElement {
     openChatRequestId.current += 1;
     setConversationState(createFreshConversationState());
     setPrompt("");
+    setComposerSessionId(advanceComposerSessionId);
   }
 
   async function handleRenameChat(chat: ChatSummary): Promise<void> {
@@ -320,6 +324,7 @@ export function App(): ReactElement {
       if (chat.id === currentChatId) {
         setConversationState(createFreshConversationState());
         setPrompt("");
+        setComposerSessionId(advanceComposerSessionId);
       }
     } catch (error: unknown) {
       setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
@@ -507,6 +512,7 @@ export function App(): ReactElement {
               resourceNavigationTarget={resourceNavigationTarget}
             />
             <PromptForm
+              key={composerSessionId}
               prompt={prompt}
               isRunning={isBusy}
               submitError={submitError}
