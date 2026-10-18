@@ -2,7 +2,8 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
   type ReactElement,
 } from "react";
 
@@ -11,7 +12,14 @@ import { Icon } from "@components/Icon";
 export type AudioPlayerProps = {
   src: string;
   label: string;
+  waveform?: number[];
 };
+
+const DEFAULT_WAVEFORM: number[] = [
+  0.32, 0.48, 0.72, 0.45, 0.88, 0.61, 0.38, 0.76,
+  0.54, 0.92, 0.68, 0.42, 0.58, 0.81, 0.47, 0.7,
+  0.36, 0.63, 0.86, 0.52, 0.73, 0.44, 0.66, 0.34,
+];
 
 export function formatAudioTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -45,9 +53,39 @@ export function getAudioDuration(
   return undefined;
 }
 
+export function getSeekTime(
+  pointerX: number,
+  left: number,
+  width: number,
+  duration: number,
+): number | undefined {
+  if (width <= 0 || !Number.isFinite(duration) || duration <= 0) {
+    return undefined;
+  }
+
+  const ratio: number = Math.min(
+    1,
+    Math.max(0, (pointerX - left) / width),
+  );
+
+  return ratio * duration;
+}
+
+export function getPlaybackProgress(
+  currentTime: number,
+  duration: number,
+): number {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, currentTime / duration));
+}
+
 export function AudioPlayer({
   src,
   label,
+  waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
   const durationProbeStartRef = useRef<number | null>(null);
@@ -128,21 +166,60 @@ export function AudioPlayer({
     }
   }
 
-  function seek(event: ChangeEvent<HTMLInputElement>): void {
+  function seekTo(nextTime: number): void {
     const audio: HTMLAudioElement | null = audioRef.current;
 
-    if (audio === null) {
+    if (audio === null || duration <= 0) {
       return;
     }
 
-    const nextTime: number = Number(event.target.value);
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
+    const boundedTime: number = Math.min(duration, Math.max(0, nextTime));
+    audio.currentTime = boundedTime;
+    setCurrentTime(boundedTime);
+  }
+
+  function seekFromWaveform(event: MouseEvent<HTMLDivElement>): void {
+    const bounds: DOMRect = event.currentTarget.getBoundingClientRect();
+    const nextTime: number | undefined = getSeekTime(
+      event.clientX,
+      bounds.left,
+      bounds.width,
+      duration,
+    );
+
+    if (nextTime !== undefined) {
+      seekTo(nextTime);
+    }
+  }
+
+  function seekWithKeyboard(event: KeyboardEvent<HTMLDivElement>): void {
+    let nextTime: number | undefined;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      nextTime = currentTime + 5;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      nextTime = currentTime - 5;
+    } else if (event.key === "Home") {
+      nextTime = 0;
+    } else if (event.key === "End") {
+      nextTime = duration;
+    }
+
+    if (nextTime !== undefined) {
+      event.preventDefault();
+      seekTo(nextTime);
+    }
   }
 
   const playbackLabel: string = isPlaying
     ? `Pause ${label}`
     : `Play ${label}`;
+  const waveformValues: number[] =
+    waveform !== undefined && waveform.length > 0
+      ? waveform
+      : DEFAULT_WAVEFORM;
+  const progress: number = getPlaybackProgress(currentTime, duration);
+  const seekLabel: string = `Seek ${label}`;
 
   return (
     <div className="audio-player">
@@ -183,17 +260,45 @@ export function AudioPlayer({
       </button>
 
       <div className="audio-progress-group">
-        <input
-          className="audio-progress"
-          type="range"
-          min="0"
-          max={duration || 0}
-          step="0.1"
-          value={Math.min(currentTime, duration || 0)}
-          disabled={duration <= 0}
-          aria-label={`Seek ${label}`}
-          onChange={seek}
-        />
+        <div
+          className="audio-waveform"
+          role="slider"
+          tabIndex={duration > 0 ? 0 : -1}
+          aria-label={seekLabel}
+          aria-valuemin={0}
+          aria-valuemax={duration}
+          aria-valuenow={Math.min(currentTime, duration)}
+          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioTime(duration)}`}
+          aria-disabled={duration <= 0}
+          aria-busy={duration <= 0 && playbackError === ""}
+          onClick={seekFromWaveform}
+          onKeyDown={seekWithKeyboard}
+        >
+          <div className="audio-waveform-bars" aria-hidden="true">
+            {waveformValues.map((value: number, index: number) => (
+              <span
+                key={index}
+                style={{ height: `${Math.max(4, value * 28)}px` }}
+              />
+            ))}
+          </div>
+          <div
+            className="audio-waveform-progress"
+            style={{
+              clipPath: `inset(0 ${100 - progress * 100}% 0 0)`,
+            }}
+            aria-hidden="true"
+          >
+            <div className="audio-waveform-bars">
+              {waveformValues.map((value: number, index: number) => (
+                <span
+                  key={index}
+                  style={{ height: `${Math.max(4, value * 28)}px` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
 
         <span className="audio-time" aria-live="off">
           {formatAudioTime(currentTime)} / {formatAudioTime(duration)}

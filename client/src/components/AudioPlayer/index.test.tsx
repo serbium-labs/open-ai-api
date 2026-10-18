@@ -6,6 +6,8 @@ import {
   AudioPlayer,
   formatAudioTime,
   getAudioDuration,
+  getPlaybackProgress,
+  getSeekTime,
 } from "./index";
 
 test("formatAudioTime formats finite durations", () => {
@@ -50,6 +52,37 @@ test("AudioPlayer renders custom accessible controls without native controls", (
 
   assert.match(markup, /aria-label="Play voice-message\.webm"/);
   assert.match(markup, /aria-label="Seek voice-message\.webm"/);
-  assert.match(markup, /type="range"/);
+  assert.match(markup, /role="slider"/);
+  assert.match(markup, /aria-busy="true"/);
+  assert.match(markup, /audio-waveform-progress/);
+  assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
+});
+
+test("getSeekTime maps and clamps waveform clicks to playback time", () => {
+  assert.equal(getSeekTime(150, 100, 200, 80), 20);
+  assert.equal(getSeekTime(50, 100, 200, 80), 0);
+  assert.equal(getSeekTime(350, 100, 200, 80), 80);
+  assert.equal(getSeekTime(150, 100, 0, 80), undefined);
+  assert.equal(getSeekTime(150, 100, 200, 0), undefined);
+});
+
+test("getPlaybackProgress calculates bounded visual progress", () => {
+  assert.equal(getPlaybackProgress(25, 100), 0.25);
+  assert.equal(getPlaybackProgress(-10, 100), 0);
+  assert.equal(getPlaybackProgress(120, 100), 1);
+  assert.equal(getPlaybackProgress(10, Number.POSITIVE_INFINITY), 0);
+});
+
+test("AudioPlayer reuses supplied waveform values", () => {
+  const markup: string = renderToStaticMarkup(
+    <AudioPlayer
+      src="/recording.webm"
+      label="recording.webm"
+      waveform={[0.5, 1]}
+    />,
+  );
+
+  assert.match(markup, /height:14px/);
+  assert.match(markup, /height:28px/);
 });

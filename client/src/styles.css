@@ -1262,24 +1262,6 @@ pre code {
   min-width: 0;
 }
 
-.voice-waveform {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  min-height: 32px;
-  padding: 4px 2px;
-}
-
-.voice-waveform span {
-  display: block;
-  flex: 1 1 0;
-  min-width: 2px;
-  max-width: 5px;
-  border-radius: 999px;
-  background: var(--color-accent);
-  opacity: 0.8;
-}
-
 .audio-player {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1321,16 +1303,52 @@ pre code {
   min-width: 0;
 }
 
-.audio-progress {
+.audio-waveform {
+  position: relative;
   width: 100%;
   min-width: 0;
-  accent-color: var(--color-accent);
+  min-height: 36px;
+  overflow: hidden;
+  border-radius: 5px;
   cursor: pointer;
 }
 
-.audio-progress:disabled {
+.audio-waveform:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.audio-waveform[aria-disabled="true"] {
   cursor: wait;
   opacity: 0.55;
+}
+
+.audio-waveform-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  height: 36px;
+  padding: 4px 2px;
+}
+
+.audio-waveform-bars span {
+  display: block;
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+}
+
+.audio-waveform-progress {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.audio-waveform-progress span {
+  background: var(--color-accent);
 }
 
 .audio-time {

@@ -723,33 +723,10 @@ export function PromptForm({
 
             {audioPreviewUrl !== null ? (
               <div className="voice-preview">
-                {waveform.length > 0 && (
-                  <div
-                    className="voice-waveform"
-                    aria-hidden="true"
-                  >
-                    {waveform.map(
-                      (
-                        value: number,
-                        index: number,
-                      ) => (
-                        <span
-                          key={index}
-                          style={{
-                            height: `${Math.max(
-                              4,
-                              value * 28,
-                            )}px`,
-                          }}
-                        />
-                      ),
-                    )}
-                  </div>
-                )}
-
                 <AudioPlayer
                   src={audioPreviewUrl}
                   label={attachment.name}
+                  waveform={waveform}
                 />
               </div>
             ) : (
