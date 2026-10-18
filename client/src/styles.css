@@ -1198,9 +1198,9 @@ pre code {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 848px) {
   :root {
-    --sidebar-width: min(calc(100vw - 56px), 360px);
+    --sidebar-width: min(calc(100vw - 104px), 360px);
     --history-sidebar-width: var(--sidebar-width);
   }
 

@@ -1,4 +1,4 @@
-export const MOBILE_BREAKPOINT_PX: number = 640;
+export const MOBILE_BREAKPOINT_PX: number = 848;
 export const MOBILE_MEDIA_QUERY: string = `(max-width: ${MOBILE_BREAKPOINT_PX}px)`;
 export const SIDEBAR_PREFERENCES_STORAGE_KEY: string = "sidebarPreferences";
 
