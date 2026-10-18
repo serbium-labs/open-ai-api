@@ -175,6 +175,11 @@ textarea {
 .chat-history-item:hover:not(.chat-history-item-locked) {
   background: var(--color-surface-muted-hover);
 }
+.chat-history-item:has(> .chat-history-open-button:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  box-shadow: var(--shadow-focus);
+}
 .chat-history-open-button {
   display: grid;
   justify-items: start;
@@ -192,6 +197,11 @@ textarea {
   background: transparent;
   box-shadow: none;
   transform: none;
+}
+
+.chat-history-open-button:focus-visible {
+  outline: 0;
+  box-shadow: none;
 }
 
 .chat-history-open-button:disabled {
