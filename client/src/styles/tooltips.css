@@ -171,6 +171,32 @@
   left: auto;
 }
 
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="start"]) {
+  --tooltip-translate-x: 0;
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="start"])::before {
+  left: 0;
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="start"])::after {
+  left: var(--tooltip-arrow-size);
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="end"]) {
+  --tooltip-translate-x: 0;
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="end"])::before {
+  right: 0;
+  left: auto;
+}
+
+:where([data-tooltip][data-tooltip-placement="bottom"][data-tooltip-align="end"])::after {
+  right: var(--tooltip-arrow-size);
+  left: auto;
+}
+
 /* Keep the first chat actions' top tooltips inside their scrolling container. */
 .chat-history-list {
   row-gap: calc(var(--tooltip-line-height) + 2 * var(--tooltip-padding-block) + 2px);

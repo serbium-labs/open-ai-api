@@ -35,6 +35,10 @@ import {
   reduceSidebarState,
   saveSidebarPreferences,
 } from "./sidebarState";
+import {
+  getChatHistoryTooltipPosition,
+  getResourcesTooltipPosition,
+} from "./sidebarTooltips";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -81,6 +85,14 @@ export function App(): ReactElement {
     () => createInitialSidebarState(isMobileViewport(), loadSidebarPreferences(getLocalStorage())),
   );
   const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
+  const chatHistoryTooltipPosition = getChatHistoryTooltipPosition(
+    isChatHistoryOpen,
+    isResourcesOpen,
+  );
+  const resourcesTooltipPosition = getResourcesTooltipPosition(
+    isResourcesOpen,
+    isChatHistoryOpen,
+  );
   const [chatListStatus, setChatListStatus] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
   const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
@@ -464,7 +476,8 @@ export function App(): ReactElement {
         }
         aria-expanded={isChatHistoryOpen}
         data-tooltip={isChatHistoryOpen ? UI_TEXT.hideChatHistoryTooltip : UI_TEXT.chatHistoryTooltip}
-        data-tooltip-placement="right"
+        data-tooltip-placement={chatHistoryTooltipPosition.placement}
+        data-tooltip-align={chatHistoryTooltipPosition.align}
         onClick={toggleChatHistory}
       >
         {isChatHistoryOpen ? (
@@ -545,7 +558,8 @@ export function App(): ReactElement {
         }
         aria-expanded={isResourcesOpen}
         data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
-        data-tooltip-placement="left"
+        data-tooltip-placement={resourcesTooltipPosition.placement}
+        data-tooltip-align={resourcesTooltipPosition.align}
         onClick={toggleResources}
       >
         {isResourcesOpen ? (
