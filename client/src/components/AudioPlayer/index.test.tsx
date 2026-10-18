@@ -8,6 +8,7 @@ import {
   getAudioDuration,
   getPlaybackProgress,
   getSeekTime,
+  getVoicePlaybackLabel,
 } from "./index";
 
 test("formatAudioTime formats finite durations", () => {
@@ -50,7 +51,9 @@ test("AudioPlayer renders custom accessible controls without native controls", (
     <AudioPlayer src="/voice.webm" label="voice-message.webm" />,
   );
 
-  assert.match(markup, /aria-label="Play voice-message\.webm"/);
+  assert.match(markup, /aria-label="Play voice"/);
+  assert.match(markup, /data-tooltip="Play voice"/);
+  assert.match(markup, /data-tooltip-placement="top"/);
   assert.match(markup, /aria-label="Seek voice-message\.webm"/);
   assert.match(markup, /role="slider"/);
   assert.match(markup, /aria-busy="true"/);
@@ -72,6 +75,11 @@ test("getPlaybackProgress calculates bounded visual progress", () => {
   assert.equal(getPlaybackProgress(-10, 100), 0);
   assert.equal(getPlaybackProgress(120, 100), 1);
   assert.equal(getPlaybackProgress(10, Number.POSITIVE_INFINITY), 0);
+});
+
+test("getVoicePlaybackLabel reflects playback state", () => {
+  assert.equal(getVoicePlaybackLabel(false), "Play voice");
+  assert.equal(getVoicePlaybackLabel(true), "Pause voice");
 });
 
 test("AudioPlayer reuses supplied waveform values", () => {

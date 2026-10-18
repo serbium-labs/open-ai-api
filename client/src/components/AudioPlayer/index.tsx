@@ -82,6 +82,10 @@ export function getPlaybackProgress(
   return Math.min(1, Math.max(0, currentTime / duration));
 }
 
+export function getVoicePlaybackLabel(isPlaying: boolean): string {
+  return isPlaying ? "Pause voice" : "Play voice";
+}
+
 export function AudioPlayer({
   src,
   label,
@@ -211,9 +215,7 @@ export function AudioPlayer({
     }
   }
 
-  const playbackLabel: string = isPlaying
-    ? `Pause ${label}`
-    : `Play ${label}`;
+  const playbackLabel: string = getVoicePlaybackLabel(isPlaying);
   const waveformValues: number[] =
     waveform !== undefined && waveform.length > 0
       ? waveform
@@ -252,6 +254,7 @@ export function AudioPlayer({
         type="button"
         aria-label={playbackLabel}
         data-tooltip={playbackLabel}
+        data-tooltip-placement="top"
         onClick={() => {
           void togglePlayback();
         }}

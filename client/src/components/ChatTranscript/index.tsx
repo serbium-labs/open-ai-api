@@ -542,6 +542,10 @@ function attachmentIcon(attachment: ChatAttachment): string {
   return "📄";
 }
 
+export function isSystemVoiceFilename(name: string): boolean {
+  return /^voice-message-\d+\.(?:m4a|ogg|webm)$/i.test(name);
+}
+
 function renderAttachment(
   attachment: ChatMessageAttachment,
   chatId: string | undefined,
@@ -570,9 +574,11 @@ function renderAttachment(
           />
         )}
 
-        <span className="message-attachment-name">
-          {attachment.name}
-        </span>
+        {!isSystemVoiceFilename(attachment.name) ? (
+          <span className="message-attachment-name">
+            {attachment.name}
+          </span>
+        ) : null}
       </div>
     );
   }
