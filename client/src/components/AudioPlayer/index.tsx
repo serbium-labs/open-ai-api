@@ -25,11 +25,32 @@ export function formatAudioTime(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
+export function getAudioDuration(
+  audio: Pick<HTMLAudioElement, "duration" | "seekable">,
+): number | undefined {
+  if (Number.isFinite(audio.duration) && audio.duration >= 0) {
+    return audio.duration;
+  }
+
+  if (audio.seekable.length > 0) {
+    const seekableEnd: number = audio.seekable.end(
+      audio.seekable.length - 1,
+    );
+
+    if (Number.isFinite(seekableEnd) && seekableEnd >= 0) {
+      return seekableEnd;
+    }
+  }
+
+  return undefined;
+}
+
 export function AudioPlayer({
   src,
   label,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const durationProbeStartRef = useRef<number | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -38,7 +59,10 @@ export function AudioPlayer({
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
 
-    setDuration(0);
+    const loadedDuration: number | undefined =
+      audio === null ? undefined : getAudioDuration(audio);
+
+    setDuration(loadedDuration ?? 0);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
@@ -49,12 +73,38 @@ export function AudioPlayer({
   }, [src]);
 
   function updateDuration(): void {
-    const nextDuration: number = audioRef.current?.duration ?? 0;
-    setDuration(Number.isFinite(nextDuration) ? nextDuration : 0);
+    const audio: HTMLAudioElement | null = audioRef.current;
+
+    if (audio === null) {
+      return;
+    }
+
+    const nextDuration: number | undefined = getAudioDuration(audio);
+
+    if (nextDuration !== undefined) {
+      setDuration(nextDuration);
+
+      if (durationProbeStartRef.current !== null) {
+        audio.currentTime = durationProbeStartRef.current;
+        durationProbeStartRef.current = null;
+      }
+    } else if (
+      audio.duration === Number.POSITIVE_INFINITY &&
+      durationProbeStartRef.current === null
+    ) {
+      // MediaRecorder WebM blobs can omit duration metadata. Seeking forces
+      // browsers to discover the actual end and emit another duration update.
+      durationProbeStartRef.current = audio.currentTime;
+      audio.currentTime = Number.MAX_SAFE_INTEGER;
+    }
   }
 
   function updateCurrentTime(): void {
-    setCurrentTime(audioRef.current?.currentTime ?? 0);
+    updateDuration();
+
+    if (durationProbeStartRef.current === null) {
+      setCurrentTime(audioRef.current?.currentTime ?? 0);
+    }
   }
 
   async function togglePlayback(): Promise<void> {
@@ -100,9 +150,13 @@ export function AudioPlayer({
         ref={audioRef}
         src={src}
         preload="metadata"
-        onCanPlay={() => setPlaybackError("")}
+        onCanPlay={() => {
+          setPlaybackError("");
+          updateDuration();
+        }}
         onDurationChange={updateDuration}
         onLoadedMetadata={updateDuration}
+        onProgress={updateDuration}
         onTimeUpdate={updateCurrentTime}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
