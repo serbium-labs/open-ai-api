@@ -85,6 +85,10 @@
   visibility: visible;
 }
 
+:where(.prompt-form [data-tooltip]):is(:hover, :focus-visible) {
+  z-index: var(--tooltip-z-index);
+}
+
 :where([data-tooltip][data-tooltip-placement="top"]) {
   --tooltip-translate-x: -50%;
   --tooltip-translate-y: 0;
