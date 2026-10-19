@@ -6,6 +6,7 @@ import {
   AudioPlayer,
   formatAudioTime,
   getAudioDuration,
+  getDurationProbeRestoreTime,
   getPlaybackProgress,
   getSeekTime,
   getVoicePlaybackLabel,
@@ -17,12 +18,43 @@ test("formatAudioTime formats finite durations", () => {
   assert.equal(formatAudioTime(Number.NaN), "0:00");
 });
 
-test("getAudioDuration reads finite and delayed seekable durations", () => {
+test("getAudioDuration reads ordinary finite durations", () => {
   const emptyRanges: TimeRanges = {
     length: 0,
     start: () => 0,
     end: () => 0,
   };
+  assert.equal(
+    getAudioDuration({ duration: 65.9, seekable: emptyRanges }),
+    65.9,
+  );
+});
+
+test("getAudioDuration rejects non-finite and negative durations", () => {
+  const emptyRanges: TimeRanges = {
+    length: 0,
+    start: () => 0,
+    end: () => 0,
+  };
+
+  assert.equal(
+    getAudioDuration({ duration: Number.NaN, seekable: emptyRanges }),
+    undefined,
+  );
+  assert.equal(
+    getAudioDuration({
+      duration: Number.NEGATIVE_INFINITY,
+      seekable: emptyRanges,
+    }),
+    undefined,
+  );
+  assert.equal(
+    getAudioDuration({ duration: -1, seekable: emptyRanges }),
+    undefined,
+  );
+});
+
+test("getAudioDuration falls back from zero to a positive seekable end", () => {
   const loadedRanges: TimeRanges = {
     length: 1,
     start: () => 0,
@@ -30,19 +62,64 @@ test("getAudioDuration reads finite and delayed seekable durations", () => {
   };
 
   assert.equal(
-    getAudioDuration({ duration: 65.9, seekable: emptyRanges }),
-    65.9,
-  );
-  assert.equal(
-    getAudioDuration({ duration: Number.NaN, seekable: emptyRanges }),
-    undefined,
-  );
-  assert.equal(
     getAudioDuration({
-      duration: Number.POSITIVE_INFINITY,
+      duration: 0,
       seekable: loadedRanges,
     }),
     42.75,
+  );
+});
+
+test("getAudioDuration leaves Infinity unresolved for a zero seekable end", () => {
+  const zeroRanges: TimeRanges = {
+    length: 1,
+    start: () => 0,
+    end: () => 0,
+  };
+
+  assert.equal(
+    getAudioDuration({
+      duration: Number.POSITIVE_INFINITY,
+      seekable: zeroRanges,
+    }),
+    undefined,
+  );
+});
+
+test("getAudioDuration recovers when metadata changes from zero to valid", () => {
+  const media = {
+    duration: 0,
+    seekable: {
+      length: 0,
+      start: () => 0,
+      end: () => 0,
+    } satisfies TimeRanges,
+  };
+
+  assert.equal(getAudioDuration(media), undefined);
+
+  media.duration = 12.4;
+
+  assert.equal(getAudioDuration(media), 12.4);
+});
+
+test("duration probes only restore playback for their original source", () => {
+  const probe = {
+    src: "blob:first-recording",
+    startTime: 3.5,
+  };
+
+  assert.equal(
+    getDurationProbeRestoreTime(probe, "blob:first-recording"),
+    3.5,
+  );
+  assert.equal(
+    getDurationProbeRestoreTime(probe, "blob:second-recording"),
+    undefined,
+  );
+  assert.equal(
+    getDurationProbeRestoreTime(null, "blob:first-recording"),
+    undefined,
   );
 });
 

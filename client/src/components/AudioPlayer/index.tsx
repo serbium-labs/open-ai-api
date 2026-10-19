@@ -17,6 +17,11 @@ export type AudioPlayerProps = {
   waveform?: number[];
 };
 
+export type AudioDurationProbe = {
+  src: string;
+  startTime: number;
+};
+
 const DEFAULT_WAVEFORM: number[] = [
   0.32, 0.48, 0.72, 0.45, 0.88, 0.61, 0.38, 0.76,
   0.54, 0.92, 0.68, 0.42, 0.58, 0.81, 0.47, 0.7,
@@ -38,7 +43,7 @@ export function formatAudioTime(seconds: number): string {
 export function getAudioDuration(
   audio: Pick<HTMLAudioElement, "duration" | "seekable">,
 ): number | undefined {
-  if (Number.isFinite(audio.duration) && audio.duration >= 0) {
+  if (Number.isFinite(audio.duration) && audio.duration > 0) {
     return audio.duration;
   }
 
@@ -47,12 +52,19 @@ export function getAudioDuration(
       audio.seekable.length - 1,
     );
 
-    if (Number.isFinite(seekableEnd) && seekableEnd >= 0) {
+    if (Number.isFinite(seekableEnd) && seekableEnd > 0) {
       return seekableEnd;
     }
   }
 
   return undefined;
+}
+
+export function getDurationProbeRestoreTime(
+  probe: AudioDurationProbe | null,
+  src: string,
+): number | undefined {
+  return probe?.src === src ? probe.startTime : undefined;
 }
 
 export function getSeekTime(
@@ -94,7 +106,7 @@ export function AudioPlayer({
   waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const durationProbeStartRef = useRef<number | null>(null);
+  const durationProbeRef = useRef<AudioDurationProbe | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -105,10 +117,8 @@ export function AudioPlayer({
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
 
-    const loadedDuration: number | undefined =
-      audio === null ? undefined : getAudioDuration(audio);
-
-    setDuration(loadedDuration ?? 0);
+    durationProbeRef.current = null;
+    setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
@@ -126,22 +136,36 @@ export function AudioPlayer({
       return;
     }
 
+    if (
+      durationProbeRef.current !== null &&
+      durationProbeRef.current.src !== src
+    ) {
+      durationProbeRef.current = null;
+    }
+
     const nextDuration: number | undefined = getAudioDuration(audio);
 
     if (nextDuration !== undefined) {
       setDuration(nextDuration);
 
-      if (durationProbeStartRef.current !== null) {
-        audio.currentTime = durationProbeStartRef.current;
-        durationProbeStartRef.current = null;
+      const restoreTime: number | undefined =
+        getDurationProbeRestoreTime(durationProbeRef.current, src);
+
+      durationProbeRef.current = null;
+
+      if (restoreTime !== undefined) {
+        audio.currentTime = restoreTime;
       }
     } else if (
       audio.duration === Number.POSITIVE_INFINITY &&
-      durationProbeStartRef.current === null
+      durationProbeRef.current === null
     ) {
       // MediaRecorder WebM blobs can omit duration metadata. Seeking forces
       // browsers to discover the actual end and emit another duration update.
-      durationProbeStartRef.current = audio.currentTime;
+      durationProbeRef.current = {
+        src,
+        startTime: audio.currentTime,
+      };
       audio.currentTime = Number.MAX_SAFE_INTEGER;
     }
   }
@@ -149,8 +173,20 @@ export function AudioPlayer({
   function updateCurrentTime(): void {
     updateDuration();
 
-    if (durationProbeStartRef.current === null) {
+    if (durationProbeRef.current === null) {
       setCurrentTime(audioRef.current?.currentTime ?? 0);
+    }
+  }
+
+  function cancelDurationProbe(): void {
+    const audio: HTMLAudioElement | null = audioRef.current;
+    const restoreTime: number | undefined =
+      getDurationProbeRestoreTime(durationProbeRef.current, src);
+
+    durationProbeRef.current = null;
+
+    if (audio !== null && restoreTime !== undefined) {
+      audio.currentTime = restoreTime;
     }
   }
 
@@ -160,6 +196,8 @@ export function AudioPlayer({
     if (audio === null) {
       return;
     }
+
+    cancelDurationProbe();
 
     if (!audio.paused) {
       audio.pause();
@@ -181,6 +219,8 @@ export function AudioPlayer({
     if (audio === null || duration <= 0) {
       return;
     }
+
+    cancelDurationProbe();
 
     const boundedTime: number = Math.min(duration, Math.max(0, nextTime));
     audio.currentTime = boundedTime;
