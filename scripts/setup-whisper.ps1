@@ -120,5 +120,5 @@ try {
 }
 
 Write-Host "whisper.cpp $WhisperVersion is ready."
-Write-Host "Run this in the PowerShell session that starts the application:"
-Write-Host "`$env:WHISPER_CPP_PATH = `"$WhisperExecutable`""
+Write-Host "The application will discover it automatically at:"
+Write-Host $WhisperExecutable

@@ -81,10 +81,8 @@ whisper.cpp build enables Metal support where supported.
 
 ```bash
 sh scripts/setup-whisper.sh
-export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(pwd)/.local/whisper.cpp/build/bin/whisper-cli"
-"$FFMPEG_PATH" -version | head -n 1
-"$WHISPER_CPP_PATH" --help
+ffmpeg -version | head -n 1
+.local/whisper.cpp/build/bin/whisper-cli --help
 ```
 
 ### Linux (Debian or Ubuntu)
@@ -96,10 +94,8 @@ setup script:
 sudo apt update
 sudo apt install build-essential cmake curl ffmpeg git
 sh scripts/setup-whisper.sh
-export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(pwd)/.local/whisper.cpp/build/bin/whisper-cli"
-"$FFMPEG_PATH" -version | head -n 1
-"$WHISPER_CPP_PATH" --help
+ffmpeg -version | head -n 1
+.local/whisper.cpp/build/bin/whisper-cli --help
 ```
 
 Use the corresponding compiler, CMake, and FFmpeg packages on other Linux
@@ -135,14 +131,12 @@ that matches the machine on which the server will run:
 
 The script explicitly selects the `Visual Studio 17 2022` CMake generator and
 creates a separate `build-x64` or `build-arm64` directory. This avoids relying
-on CMake's environment-dependent default generator. Configure and verify the
-executables in the same PowerShell session that will start the application:
+on CMake's environment-dependent default generator. Verify the executables
+after the build:
 
 ```powershell
-$env:FFMPEG_PATH = (Get-Command ffmpeg.exe).Source
-$env:WHISPER_CPP_PATH = (Resolve-Path ".local\whisper.cpp\build-x64\bin\Release\whisper-cli.exe").Path
-& $env:FFMPEG_PATH -version
-& $env:WHISPER_CPP_PATH --help
+ffmpeg.exe -version
+& ".local\whisper.cpp\build-x64\bin\Release\whisper-cli.exe" --help
 ```
 
 For ARM64, replace `build-x64` with `build-arm64`. Building x64 on Windows ARM64
@@ -230,8 +224,10 @@ the repository root. `FFMPEG_PATH` and `WHISPER_CPP_PATH` may be either native
 executable names on `PATH` or full paths. Full paths containing spaces work
 without extra escaping because the server does not invoke a shell.
 
-After the tools and model have been installed, keep these environment variables
-set and start the application using the commands in [Setup](#setup).
+After the tools and model have been installed, start the application using the
+commands in [Setup](#setup). The application automatically discovers the
+project-local whisper.cpp executable created by these scripts. Set
+`WHISPER_CPP_PATH` in `.env` only for a custom or external installation.
 `AUDIO_TRANSCRIPTION_TIMEOUT_MS` can override the 120-second per-command
 timeout. Missing tools, an unreadable model, unsupported audio bytes, empty
 speech, command failures, and timeouts are returned as errors; the app does not
@@ -261,7 +257,20 @@ system or manual cleanup.
    npm install
    ```
 
-3. Start the application in development mode:
+3. Create a local configuration file. The checked-in defaults work for most
+   installations:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   In Windows PowerShell, use `Copy-Item .env.example .env`. Existing shell
+   environment variables take precedence over values in `.env`.
+
+4. Complete the platform-specific voice setup above if voice messages are
+   needed. No `WHISPER_CPP_PATH` export is required for a project-local build.
+
+5. Start the application in development mode:
 
    ```bash
    npm start
@@ -273,7 +282,7 @@ system or manual cleanup.
    npm run dev
    ```
 
-4. Open <http://localhost:5173>.
+6. Open <http://localhost:5173>, or the port configured by `CLIENT_PORT`.
 
 ## Usage
 
@@ -357,9 +366,10 @@ The `chats/` directory is ignored by Git. Older `responses/` and
 
 ## Development
 
-The client runs on <http://localhost:5173>. The server runs on
-<http://localhost:3001>. Vite proxies `/api/*` requests to the Express server,
-so browser code can call `/api/chats` without hardcoding the server origin.
+By default, the client runs on <http://localhost:5173> and the server runs on
+<http://localhost:3001>. Vite reads the same root configuration and proxies
+`/api/*` requests to `SERVER_PORT`. A port conflict is reported instead of
+silently moving the client to another port.
 
 Run one side at a time if needed:
 
@@ -393,7 +403,8 @@ Development conventions are documented in `DEVELOPMENT.md`.
 
 The server creates a Codex SDK client without passing an API key. The Codex
 process therefore picks up the existing local Codex authentication session.
-There is no need to create a `.env` file or set `OPENAI_API_KEY` for this setup.
+An `OPENAI_API_KEY` is not required for this setup. The optional `.env` file is
+for local runtime settings and does not change the Codex authentication flow.
 
 The session belongs to the operating-system user running the server. If the
 server is started under another user, in a container, or on another machine,
@@ -540,12 +551,22 @@ chat requests handled by this app.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `PORT` | No | Express server port. Defaults to `3001`. |
+| `SERVER_PORT` | No | Express port and Vite proxy target. Defaults to `3001` and takes precedence over `PORT`. |
+| `CLIENT_PORT` | No | Vite client port. Defaults to `5173`. |
+| `PORT` | No | Backward-compatible server-port alias, used only when `SERVER_PORT` is unset. |
 | `OPENAI_API_KEY` | No | Optional API-key authentication instead of the stored Codex session. |
-| `WHISPER_CPP_PATH` | For voice | Path to `whisper-cli`. Defaults to `whisper-cli` on `PATH`. |
+| `WHISPER_CPP_PATH` | No | Optional custom `whisper-cli` path. Project-local builds are discovered first, then `PATH` is used. |
 | `WHISPER_MODEL_PATH` | For voice | GGML model path. Defaults to `models/ggml-base.bin`. |
 | `FFMPEG_PATH` | For voice | Path to `ffmpeg`. Defaults to `ffmpeg` on `PATH`. |
+| `WHISPER_LANGUAGE` | No | Language code. Defaults to `auto`; use `ru` for Russian or `en` for English. |
 | `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | Per-command audio timeout. Defaults to `120000`. |
+
+Ports must be integers from 1 to 65535. Relative paths are resolved from the
+repository root, while simple executable names are resolved through `PATH`.
+At startup, bounded checks verify FFmpeg, whisper.cpp, and the model. Problems
+are printed as actionable `[audio]` warnings, but the server, client, and text
+chat continue to work. Voice requests check dependencies again and return a
+clear error, so dependencies can be fixed and retried without restarting.
 
 ## License
 

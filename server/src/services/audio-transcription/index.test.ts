@@ -9,7 +9,9 @@ import test from "node:test";
 
 import {
   AudioTranscriptionService,
+  diagnoseAudioDependencies,
   LocalAudioCommandTimeoutError,
+  reportAudioDependencyDiagnostics,
   runLocalCommand,
   type CommandRunner,
 } from "./index";
@@ -46,6 +48,7 @@ test("transcribe converts audio and returns whisper.cpp output", async () => {
   try {
     const service = new AudioTranscriptionService({
       ffmpegExecutable: "C:\\Program Files\\FFmpeg\\bin\\ffmpeg.exe",
+      language: "ru",
       maxFileSizeBytes: 1024,
       modelPath,
       runCommand,
@@ -85,7 +88,7 @@ test("transcribe converts audio and returns whisper.cpp output", async () => {
       "-m",
       modelPath,
       "-l",
-      "auto",
+      "ru",
       "-f",
       commands[0]?.args.at(-1),
       "-otxt",
@@ -103,6 +106,7 @@ test("transcribe reports a missing local model before running tools", async () =
   let commandWasRun = false;
   const service = new AudioTranscriptionService({
     ffmpegExecutable: "ffmpeg",
+    language: "auto",
     maxFileSizeBytes: 1024,
     modelPath: "/definitely/missing/ggml-model.bin",
     runCommand: async () => {
@@ -114,7 +118,7 @@ test("transcribe reports a missing local model before running tools", async () =
 
   await assert.rejects(
     service.transcribe({ path: "/unused", sizeBytes: 12 }),
-    /local Whisper model not found or unreadable/i,
+    /Whisper model unavailable/i,
   );
   assert.equal(commandWasRun, false);
 });
@@ -122,6 +126,7 @@ test("transcribe reports a missing local model before running tools", async () =
 test("transcribe rejects oversized files", async () => {
   const service = new AudioTranscriptionService({
     ffmpegExecutable: "ffmpeg",
+    language: "auto",
     maxFileSizeBytes: 10,
     modelPath: "/unused",
     timeoutMs: 500,
@@ -134,6 +139,65 @@ test("transcribe rejects oversized files", async () => {
   );
 });
 
+test("request-time FFmpeg failures identify FFMPEG_PATH", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "missing-ffmpeg-request-test-"));
+  const modelPath = join(directory, "model.bin");
+  await writeFile(modelPath, "model");
+
+  try {
+    const service = new AudioTranscriptionService({
+      ffmpegExecutable: "C:\\Missing Audio Tools\\ffmpeg.exe",
+      language: "auto",
+      maxFileSizeBytes: 1024,
+      modelPath,
+      runCommand: async () => {
+        throw new Error("not found");
+      },
+      timeoutMs: 500,
+      whisperExecutable: "whisper-cli",
+    });
+
+    await assert.rejects(
+      service.transcribe({ path: join(directory, "input.ogg"), sizeBytes: 12 }),
+      /FFmpeg unavailable.*FFMPEG_PATH=.*Missing Audio Tools.*Install FFmpeg/i,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("request-time whisper failures identify WHISPER_CPP_PATH", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "missing-whisper-request-test-"));
+  const modelPath = join(directory, "model.bin");
+  let commandCount = 0;
+  await writeFile(modelPath, "model");
+
+  try {
+    const service = new AudioTranscriptionService({
+      ffmpegExecutable: "ffmpeg",
+      language: "en",
+      maxFileSizeBytes: 1024,
+      modelPath,
+      runCommand: async () => {
+        commandCount += 1;
+
+        if (commandCount === 2) {
+          throw new Error("not found");
+        }
+      },
+      timeoutMs: 500,
+      whisperExecutable: "C:\\Missing Whisper\\whisper-cli.exe",
+    });
+
+    await assert.rejects(
+      service.transcribe({ path: join(directory, "input.ogg"), sizeBytes: 12 }),
+      /whisper\.cpp unavailable.*WHISPER_CPP_PATH=.*Missing Whisper.*setup script/i,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("runLocalCommand gives a setup error for a missing executable", async () => {
   await assert.rejects(
     runLocalCommand(
@@ -143,6 +207,124 @@ test("runLocalCommand gives a setup error for a missing executable", async () =>
     ),
     /required local audio tool was not found/i,
   );
+});
+
+test("audio dependency diagnostics report missing tools and model without throwing", async () => {
+  const diagnostics = await diagnoseAudioDependencies({
+    ffmpegExecutable: "missing-ffmpeg",
+    language: "auto",
+    maxFileSizeBytes: 1024,
+    modelPath: "/definitely/missing/model.bin",
+    timeoutMs: 500,
+    whisperExecutable: "missing-whisper",
+  }, async (command) => {
+    throw new Error(`${command} was not found`);
+  });
+
+  assert.equal(diagnostics.length, 3);
+  assert.match(diagnostics.find(({ dependency }) => dependency === "FFmpeg")?.message ?? "", /FFMPEG_PATH="missing-ffmpeg"/);
+  assert.match(diagnostics.find(({ dependency }) => dependency === "whisper.cpp")?.message ?? "", /WHISPER_CPP_PATH="missing-whisper"/);
+  assert.match(diagnostics.find(({ dependency }) => dependency === "Whisper model")?.message ?? "", /WHISPER_MODEL_PATH=.*missing\/model\.bin/);
+});
+
+test("audio dependency diagnostics reject a model path that is not a file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "invalid-model-path-test-"));
+
+  try {
+    const diagnostics = await diagnoseAudioDependencies({
+      ffmpegExecutable: "ffmpeg",
+      language: "auto",
+      maxFileSizeBytes: 1024,
+      modelPath: directory,
+      timeoutMs: 500,
+      whisperExecutable: "whisper-cli",
+    }, async () => {});
+
+    assert.equal(diagnostics.length, 1);
+    assert.match(diagnostics[0]?.message ?? "", /not a file/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("audio dependency diagnostics accept successful lightweight probes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "audio-diagnostics-test-"));
+  const modelPath = join(directory, "model.bin");
+  const probes: Array<{ command: string; args: string[]; timeoutMs: number }> = [];
+  await writeFile(modelPath, "model");
+
+  try {
+    const diagnostics = await diagnoseAudioDependencies({
+      ffmpegExecutable: "ffmpeg",
+      language: "auto",
+      maxFileSizeBytes: 1024,
+      modelPath,
+      timeoutMs: 500,
+      whisperExecutable: "whisper-cli",
+    }, async (command, args, timeoutMs) => {
+      probes.push({ command, args, timeoutMs });
+    });
+
+    assert.deepEqual(diagnostics, []);
+    assert.deepEqual(probes.map(({ command, args }) => ({ command, args })), [
+      { command: "ffmpeg", args: ["-version"] },
+      { command: "whisper-cli", args: ["--help"] },
+    ]);
+    assert.ok(probes.every(({ timeoutMs }) => timeoutMs === 5_000));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("failed dependency probes become actionable diagnostics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "audio-failed-probe-test-"));
+  const modelPath = join(directory, "model.bin");
+  await writeFile(modelPath, "model");
+
+  try {
+    const diagnostics = await diagnoseAudioDependencies({
+      ffmpegExecutable: "/tools/ffmpeg",
+      language: "auto",
+      maxFileSizeBytes: 1024,
+      modelPath,
+      timeoutMs: 500,
+      whisperExecutable: "/tools/whisper-cli",
+    }, async (command) => {
+      if (command.endsWith("whisper-cli")) {
+        throw new Error("exit 2");
+      }
+    });
+
+    assert.equal(diagnostics.length, 1);
+    assert.match(diagnostics[0]?.message ?? "", /whisper\.cpp unavailable.*exit 2.*setup script/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("startup diagnostics warn without preventing server startup flow", async () => {
+  const warnings: string[] = [];
+  const config = {
+    port: 3001,
+    repositoryRoot: "/project",
+    chatArchiveDirectory: "/project/chats",
+    codexModel: "test-model",
+    audioTranscription: {
+      ffmpegExecutable: "missing-ffmpeg",
+      language: "auto",
+      maxFileSizeBytes: 1024,
+      modelPath: "/missing/model.bin",
+      timeoutMs: 500,
+      whisperExecutable: "missing-whisper",
+    },
+  };
+
+  await assert.doesNotReject(reportAudioDependencyDiagnostics(
+    config,
+    async () => [{ dependency: "FFmpeg", message: "FFmpeg is missing" }],
+    (message) => warnings.push(message),
+  ));
+  assert.match(warnings[0] ?? "", /Text chat remains available/);
 });
 
 test("a timed-out command closes before transcription temporary files are removed", async () => {
@@ -168,6 +350,7 @@ test("a timed-out command closes before transcription temporary files are remove
 
   const service = new AudioTranscriptionService({
     ffmpegExecutable: "C:\\Audio Tools\\ffmpeg.exe",
+    language: "auto",
     maxFileSizeBytes: 1024,
     modelPath,
     runCommand: async (command, args, timeoutMs) => {
@@ -226,6 +409,7 @@ test("a timed-out command retains temporary files when kill returns false withou
 
   const service = new AudioTranscriptionService({
     ffmpegExecutable: "unresponsive-tool",
+    language: "auto",
     maxFileSizeBytes: 1024,
     modelPath,
     runCommand: async (command, args, timeoutMs) => {
@@ -297,6 +481,7 @@ test("a timed-out command retains temporary files when kill throws without close
 
   const service = new AudioTranscriptionService({
     ffmpegExecutable: "unresponsive-tool",
+    language: "auto",
     maxFileSizeBytes: 1024,
     modelPath,
     runCommand: async (command, args, timeoutMs) => {

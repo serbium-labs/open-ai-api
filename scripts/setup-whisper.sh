@@ -105,5 +105,5 @@ if [ ! -x "$WHISPER_EXECUTABLE" ]; then
 fi
 
 echo "whisper.cpp $WHISPER_VERSION is ready."
-echo "Run this in the terminal that starts the application:"
-echo "export WHISPER_CPP_PATH=\"$WHISPER_EXECUTABLE\""
+echo "The application will discover it automatically at:"
+echo "$WHISPER_EXECUTABLE"
