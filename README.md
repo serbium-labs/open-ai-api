@@ -284,6 +284,230 @@ system or manual cleanup.
 
 6. Open <http://localhost:5173>, or the port configured by `CLIENT_PORT`.
 
+## Docker Compose
+
+Docker Compose builds one reproducible Linux image and runs the development
+client and server together in one container. The image contains Node.js 22,
+FFmpeg, the Codex CLI supplied by the locked npm dependencies, whisper.cpp at
+commit `927cfce34f31707e17f2bff35c349632fb9e2c3a`, and the multilingual Whisper
+`base` model after verifying its SHA-1 checksum. Docker-managed volumes retain
+chats, Linux `node_modules`, and the container's separate Codex login.
+
+### Prerequisites and repository setup
+
+- Windows: complete the [Windows Docker Desktop setup](#windows-docker-desktop-setup)
+  below. Run the remaining commands in PowerShell or a WSL shell from the
+  repository directory; this image does not run as a native Windows container.
+- macOS: install and start Docker Desktop.
+- Linux: install and start Docker Engine with the Docker Compose plugin, and
+  ensure your user can run `docker` commands.
+- All platforms: install Git and verify `git --version` and
+  `docker compose version` before continuing.
+
+#### Windows Docker Desktop setup
+
+1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+   and start it from the Windows Start menu. Wait until Docker Desktop reports
+   that its engine is running.
+2. In Docker Desktop, open **Settings > General** and enable **Use the WSL 2
+   based engine**, if that option is shown, then apply the change. Docker
+   Desktop may enable it automatically or hide the option on some versions.
+   See Docker's [WSL 2 backend guide](https://docs.docker.com/desktop/features/wsl/)
+   for current requirements and setup details.
+3. This project requires Linux containers. Open the Docker Desktop menu from
+   its taskbar notification-area icon. If the menu offers **Switch to Linux
+   containers**, select it and wait for Docker Desktop to restart. If it offers
+   **Switch to Windows containers** instead, Docker Desktop is already running
+   Linux containers. Menu wording and location can vary by Docker Desktop
+   version.
+4. Open a new PowerShell window and run:
+
+   ```powershell
+   docker info
+   docker compose version
+   ```
+
+   A working setup makes `docker info` print both client and server information,
+   including `OSType: linux` in its **Server** section. The second command
+   prints a Docker Compose version without a connection error. Continue only
+   after both commands succeed.
+
+Obtain the repository and enter its root directory:
+
+```bash
+git clone https://github.com/serbium-labs/open-ai-api.git
+cd open-ai-api
+```
+
+If you already have a checkout, open a terminal in that existing repository
+root instead. Create the optional local configuration from the safe example:
+
+```bash
+cp .env.example .env
+```
+
+In PowerShell, use `Copy-Item .env.example .env`. Do not put passwords, access
+tokens, or other secrets in `.env`: the file is excluded from the image and
+Git, but the development bind mount makes it readable inside the running
+container. Compose fixes `CLIENT_PORT=5173`, `SERVER_PORT=3001`, and the Linux
+paths for FFmpeg, whisper.cpp, and its model. The useful optional `.env` values
+for Compose are `WHISPER_LANGUAGE` (default `auto`) and
+`AUDIO_TRANSCRIPTION_TIMEOUT_MS` (default `120000`). The native paths in
+`.env.example` are overridden inside the container.
+
+### First start and Codex authentication
+
+Build the image from the repository root:
+
+```bash
+docker compose build
+```
+
+Authenticate the container's dedicated Codex home before starting the app:
+
+```bash
+docker compose run --rm app codex login --device-auth
+docker compose run --rm app codex login status
+```
+
+The first command displays a URL and a short-lived device code. Open the URL
+yourself, confirm that it is an OpenAI/ChatGPT sign-in page, and enter the code
+there. Never paste the code into chat, an issue, a log, or a message to another
+person; anyone who obtains a live code may be able to complete the login.
+
+If Codex reports that device-code login is disabled, open ChatGPT **Settings >
+Security** and enable **Device code authorization**. In a managed workspace,
+an owner or administrator may also need to enable **Enable device code
+authentication for Codex CLI** in the workspace's Codex Local permissions.
+OpenAI warns that device codes can be phished, so disable the setting again
+after login if that is your workspace policy. Then rerun both commands above.
+
+This login is intentionally separate from the host's `~/.codex`; its
+credentials are stored in the `codex_home` Docker volume and are not copied
+into the image or repository.
+
+Start the app, wait for both development servers to report that they are
+ready, and open <http://localhost:5173> in a browser:
+
+```bash
+docker compose up
+```
+
+Press Ctrl+C to stop an attached run. For subsequent use, start in the
+background and inspect the logs if needed:
+
+```bash
+docker compose up -d
+docker compose logs --follow app
+```
+
+Stop and remove the container and Compose network without deleting persisted
+data:
+
+```bash
+docker compose down
+```
+
+### Persistence, security, and rebuilding
+
+The repository is mounted read-write at `/app` so Vite can see development
+changes. Processes in the container, including Codex operations initiated by
+this app, can therefore read and modify the checkout and any local files in it.
+Run only trusted prompts and code, keep secrets outside the repository, and
+review source changes after use.
+
+The `chats` volume persists `/app/chats`, and `codex_home` persists
+`/home/node/.codex`. The `node_modules` volume preserves the Linux dependencies
+from the image instead of exposing incompatible host dependencies.
+`docker compose down` retains all three volumes. **Do not run
+`docker compose down --volumes` unless you intend to delete the Compose-managed
+chat archive, container-specific Codex login, and installed dependency volume.**
+Back up any chats first. The host's native `chats/` directory is hidden by the
+named volume while Compose is running and is not the Docker chat backup.
+
+Rebuild after changing package manifests, the lockfile, Dockerfile, or Whisper
+build inputs:
+
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up
+```
+
+### Troubleshooting
+
+Inspect the resolved configuration, container state, logs, login, and bundled
+voice tools with:
+
+```bash
+docker compose config
+docker compose ps
+docker compose logs --follow app
+docker compose run --rm app codex login status
+docker compose run --rm app ffmpeg -version
+docker compose run --rm app /opt/whisper/bin/whisper-cli --help
+docker compose exec app sh -lc 'id && printf "%s\n" "$CODEX_HOME"'
+```
+
+Common failures:
+
+- Docker command or engine unavailable on Windows: if PowerShell reports that
+  `docker` is not recognized, install or restart Docker Desktop, then open a new
+  PowerShell window. If `docker info` reports that it cannot connect to the
+  daemon or engine, start or restart Docker Desktop and wait until its engine
+  is running before retrying. Follow Docker's
+  [Windows installation guide](https://docs.docker.com/desktop/setup/install/windows-install/)
+  if the command remains unavailable.
+- WSL 2 unavailable or outdated on Windows: open PowerShell as Administrator,
+  run `wsl --install` if WSL is not installed, or run `wsl --update` to update
+  it, then restart Windows if prompted. See Microsoft's
+  [WSL installation guide](https://learn.microsoft.com/windows/wsl/install) and
+  Docker's [WSL 2 requirements](https://docs.docker.com/desktop/features/wsl/)
+  for supported Windows versions, virtualization requirements, and additional
+  diagnostics.
+- Docker Desktop using Windows containers: this image cannot run in that mode.
+  Open the Docker Desktop taskbar menu, select **Switch to Linux containers**,
+  wait for the engine to restart, and confirm that the **Server** section of
+  `docker info` shows `OSType: linux` before running Compose again.
+- Port 5173 already in use: stop the conflicting process, then run
+  `docker compose up` again. The current Compose file does not provide a host
+  port override.
+- Authentication missing or expired: rerun the device-login and login-status
+  commands above. Do not mount or copy the host's `~/.codex` directory.
+- Voice unavailable: check the app logs, then run the FFmpeg and `whisper-cli`
+  commands above. Both executables and the verified model are built into the
+  image; `.env` must not replace their container paths.
+- Stale dependencies after a lockfile change: use the no-cache rebuild above.
+  If the existing `node_modules` volume still masks the rebuilt dependencies,
+  run `docker volume ls`, identify this project's `node_modules` volume, stop
+  the stack, and remove only that volume with `docker volume rm <volume-name>`.
+  Rebuild and start again. Do not remove the `chats` or `codex_home` volumes.
+- Permission errors in chats or credentials: use the `id`/`CODEX_HOME` command
+  above and inspect volume ownership. The image runs as the unprivileged
+  `node` user, not root.
+
+The full Compose workflow—including image build, device authentication, text
+chat, FFmpeg/Whisper voice transcription, model responses, persistence, and
+shutdown—has been tested on macOS Apple Silicon with a Linux ARM64 container.
+Linux AMD64 and Docker Desktop on Windows with WSL 2/Linux containers are
+expected to work from the architecture-aware Node/Codex packages and portable
+CMake build, but have not been runtime-tested. Native Windows containers are
+not supported by this Dockerfile.
+
+### Native development without Docker
+
+Docker Compose is optional. For the existing native workflow, install the
+platform prerequisites and voice components described above, authenticate the
+host Codex CLI, copy `.env.example` to `.env`, install dependencies, and run:
+
+```bash
+npm install
+npm start
+```
+
+Native development uses the host's Codex login, host tools, and the repository
+`chats/` directory rather than the Docker volumes.
+
 ## Usage
 
 Enter a prompt in the chat composer and send it with Enter or the send button.
