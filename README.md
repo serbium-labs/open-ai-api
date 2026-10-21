@@ -35,8 +35,9 @@ it works with the same ChatGPT account already signed in to Codex.
 
 - Node.js 18 or later
 - Codex CLI authenticated with your ChatGPT account
-- `ffmpeg` for safe audio decoding and normalization
-- `whisper.cpp` plus a local GGML Whisper model for voice messages
+- Git
+- For voice messages: FFmpeg, CMake, a C/C++ compiler, and a local GGML
+  Whisper model
 
 ## Local voice transcription
 
@@ -45,113 +46,184 @@ speech API, paid service, API key, or audio upload to a transcription provider
 is used. The server accepts WebM, Ogg, M4A/MP4, WAV, MP3, and FLAC audio up to
 20 MB, converts it to 16 kHz mono WAV with `ffmpeg`, and runs `whisper-cli`.
 
-Install FFmpeg and the tools needed to build
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) before starting the
-application. The commands below install and build the native tools; the later
-application setup remains the same on every platform.
+The provided setup scripts clone the official
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) release `v1.9.4` into
+`.local/whisper.cpp/` and build it there. The entire `.local/` directory is
+ignored by Git, so downloaded source and native build artifacts are never
+committed. Both scripts verify that the release resolves to commit
+`927cfce34f31707e17f2bff35c349632fb9e2c3a`. Re-running a script reuses a clean
+checkout at that revision. It refuses to replace an existing directory, a
+modified checkout, or a checkout at another revision. New clones use a
+temporary sibling directory and are moved into place only after verification.
+The macOS/Linux script also prevents concurrent setup runs from installing into
+the same directory. If `.local/whisper.cpp/` already contains an incomplete
+installation from an older attempt, inspect it and move or remove it manually
+before running the setup script again.
 
-### macOS
+An existing installation such as `../whisper.cpp` is not read, changed, or
+deleted by these scripts. You may continue using it by setting
+`WHISPER_CPP_PATH` to its `whisper-cli` executable instead of running the
+project-local setup.
 
-Install CMake and FFmpeg with [Homebrew](https://brew.sh/):
+### macOS Apple Silicon and Intel
+
+Install Git, CMake, and FFmpeg with [Homebrew](https://brew.sh/). Xcode Command
+Line Tools provide the compiler; install them first with
+`xcode-select --install` if `cc` is unavailable.
 
 ```bash
-brew install cmake ffmpeg
+brew install cmake ffmpeg git
 ```
 
-Build the official whisper.cpp source in a sibling directory. Its default build
-uses Metal acceleration on Apple Silicon:
+From the project root, run the setup script. CMake builds for the Mac's native
+architecture: ARM64 on Apple Silicon or x86_64 on Intel. The default macOS
+whisper.cpp build enables Metal support where supported.
 
 ```bash
-git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
-cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
-cmake --build ../whisper.cpp/build --config Release -j
+sh scripts/setup-whisper.sh
 export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
-ffmpeg -version | head -n 1
+export WHISPER_CPP_PATH="$(pwd)/.local/whisper.cpp/build/bin/whisper-cli"
+"$FFMPEG_PATH" -version | head -n 1
 "$WHISPER_CPP_PATH" --help
 ```
 
 ### Linux (Debian or Ubuntu)
 
-Install the compiler, CMake, Git, curl, and FFmpeg, then build whisper.cpp:
+Install the compiler, CMake, Git, curl, and FFmpeg, then run the project-local
+setup script:
 
 ```bash
 sudo apt update
 sudo apt install build-essential cmake curl ffmpeg git
-git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
-cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
-cmake --build ../whisper.cpp/build --config Release -j
+sh scripts/setup-whisper.sh
 export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
-ffmpeg -version | head -n 1
+export WHISPER_CPP_PATH="$(pwd)/.local/whisper.cpp/build/bin/whisper-cli"
+"$FFMPEG_PATH" -version | head -n 1
 "$WHISPER_CPP_PATH" --help
 ```
 
 Use the corresponding compiler, CMake, and FFmpeg packages on other Linux
 distributions.
 
-### Windows (PowerShell)
+### Windows x64 and ARM64 (PowerShell)
 
-Install Git, CMake, and a Windows build linked from the official
-[FFmpeg download page](https://ffmpeg.org/download.html). Add FFmpeg's `bin`
-directory to `PATH`, or retain the full path to `ffmpeg.exe` for the configuration
-below. Also install a C++ compiler; one supported option is Visual Studio 2022
-with the **Desktop development with C++** workload. Ensure `git` and `cmake` are
-available in a new PowerShell session, then build whisper.cpp:
+Install these prerequisites:
+
+- Git and Node.js, with both commands added to `PATH`.
+- CMake, with **Add CMake to the system PATH** selected, or the CMake component
+  installed by Visual Studio.
+- Visual Studio 2022 or Visual Studio 2022 Build Tools with the **Desktop
+  development with C++** workload.
+- The MSVC x64/x86 build tools and a Windows 10 or Windows 11 SDK for an x64
+  build.
+- The MSVC ARM64/ARM64EC build tools in the Visual Studio Installer's
+  **Individual components** tab for a native ARM64 build.
+- A Windows FFmpeg build linked from the official
+  [FFmpeg download page](https://ffmpeg.org/download.html).
+
+Open a new PowerShell session after installation and confirm that `git`,
+`cmake`, and `ffmpeg.exe` are available. From the project root, choose the build
+that matches the machine on which the server will run:
 
 ```powershell
-git clone https://github.com/ggml-org/whisper.cpp.git ..\whisper.cpp
-cmake -S ..\whisper.cpp -B ..\whisper.cpp\build -A x64
-cmake --build ..\whisper.cpp\build --config Release
+# Most Windows PCs
+.\scripts\setup-whisper.ps1 -Architecture x64
+
+# Native Windows on ARM64 (requires the ARM64 MSVC tools)
+.\scripts\setup-whisper.ps1 -Architecture ARM64
 ```
 
-With the Visual Studio CMake generator, the executable is commonly written to
-`..\whisper.cpp\build\bin\Release\whisper-cli.exe`. Some generators instead
-write `..\whisper.cpp\build\bin\whisper-cli.exe`; use the path that exists in
-your build. Configure and verify both executables in the same PowerShell session
-that will start the application:
+The script explicitly selects the `Visual Studio 17 2022` CMake generator and
+creates a separate `build-x64` or `build-arm64` directory. This avoids relying
+on CMake's environment-dependent default generator. Configure and verify the
+executables in the same PowerShell session that will start the application:
 
 ```powershell
 $env:FFMPEG_PATH = (Get-Command ffmpeg.exe).Source
-$env:WHISPER_CPP_PATH = (Resolve-Path "..\whisper.cpp\build\bin\Release\whisper-cli.exe").Path
+$env:WHISPER_CPP_PATH = (Resolve-Path ".local\whisper.cpp\build-x64\bin\Release\whisper-cli.exe").Path
 & $env:FFMPEG_PATH -version
 & $env:WHISPER_CPP_PATH --help
 ```
 
-If `ffmpeg.exe` is not on `PATH`, assign its full path instead. PowerShell quotes
-paths containing spaces when assigning them; the quote characters are not part
-of the value. Do not put literal quote characters inside any executable-path
-environment variable, and point these variables directly to `.exe` files rather
-than `.cmd` or `.bat` wrappers.
+For ARM64, replace `build-x64` with `build-arm64`. Building x64 on Windows ARM64
+is also possible when the x64 toolchain is installed, but it produces an x64
+binary that runs through Windows emulation rather than a native ARM64 binary.
+
+If script execution is disabled by local PowerShell policy, invoke it for the
+current process with `powershell -ExecutionPolicy Bypass -File
+.\scripts\setup-whisper.ps1 -Architecture x64`. If `ffmpeg.exe` is not on
+`PATH`, assign its full path instead. PowerShell quotes paths containing spaces
+when assigning them; the quote characters are not part of the value. Point
+executable variables directly to `.exe` files rather than `.cmd` or `.bat`
+wrappers.
 
 ### Download and verify the model
 
 From the project root on macOS or Linux, download the multilingual `base` model
-and verify its SHA-1 digest:
+to a unique temporary file, verify its SHA-1 digest, and move it into place only
+when no model already exists:
 
 ```bash
 mkdir -p models
+if [ -e models/ggml-base.bin ]; then
+  echo "Refusing to overwrite existing model: models/ggml-base.bin" >&2
+  exit 1
+fi
+model_tmp=$(mktemp models/ggml-base.bin.tmp.XXXXXX)
+trap 'rm -f "$model_tmp"' EXIT HUP INT TERM
 curl --fail --location \
-  --output models/ggml-base.bin \
+  --output "$model_tmp" \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+if command -v shasum >/dev/null 2>&1; then
+  model_sha1=$(shasum -a 1 "$model_tmp" | awk '{print $1}')
+else
+  model_sha1=$(sha1sum "$model_tmp" | awk '{print $1}')
+fi
+if [ "$model_sha1" != "465707469ff3a37a2b9b8d8f89f2f99de7299dac" ]; then
+  echo "Model checksum verification failed." >&2
+  exit 1
+fi
+if ! ln "$model_tmp" models/ggml-base.bin; then
+  echo "Refusing to overwrite model created during download." >&2
+  exit 1
+fi
+rm -f "$model_tmp"
+trap - EXIT HUP INT TERM
 export WHISPER_MODEL_PATH="$(pwd)/models/ggml-base.bin"
 ```
 
-Verify it with `shasum -a 1 models/ggml-base.bin` on macOS or
-`sha1sum models/ggml-base.bin` on Linux.
+The temporary download and final model are on the same filesystem, so `ln`
+creates the final name atomically and fails if another installer created it
+first. It never replaces an existing model.
 
 On Windows PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force models | Out-Null
-Invoke-WebRequest `
-  -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
-  -OutFile "models\ggml-base.bin"
-Get-FileHash -Algorithm SHA1 "models\ggml-base.bin"
+$modelPath = Join-Path (Resolve-Path models).Path "ggml-base.bin"
+if (Test-Path -LiteralPath $modelPath) {
+  throw "Refusing to overwrite existing model: $modelPath"
+}
+$modelTemp = Join-Path (Resolve-Path models).Path "ggml-base.bin.tmp.$([guid]::NewGuid().ToString('N'))"
+try {
+  Invoke-WebRequest `
+    -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
+    -OutFile $modelTemp
+  $modelSha1 = (Get-FileHash -Algorithm SHA1 -LiteralPath $modelTemp).Hash
+  if ($modelSha1 -ne "465707469ff3a37a2b9b8d8f89f2f99de7299dac") {
+    throw "Model checksum verification failed."
+  }
+  [System.IO.File]::Move($modelTemp, $modelPath)
+} finally {
+  if (Test-Path -LiteralPath $modelTemp) {
+    Remove-Item -LiteralPath $modelTemp -Force
+  }
+}
 $env:WHISPER_MODEL_PATH = (Resolve-Path "models\ggml-base.bin").Path
 ```
 
-The expected SHA-1 for `ggml-base.bin` is
+The expected SHA-1 for `ggml-base.bin`, published in the official
+[whisper.cpp model repository](https://huggingface.co/ggerganov/whisper.cpp), is
 `465707469ff3a37a2b9b8d8f89f2f99de7299dac`. The model is ignored by Git. An
 absolute model path is recommended; project-relative paths are resolved from
 the repository root. `FFMPEG_PATH` and `WHISPER_CPP_PATH` may be either native
