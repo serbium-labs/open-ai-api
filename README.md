@@ -38,66 +38,136 @@ it works with the same ChatGPT account already signed in to Codex.
 - `ffmpeg` for safe audio decoding and normalization
 - `whisper.cpp` plus a local GGML Whisper model for voice messages
 
-## Local voice transcription on macOS Apple Silicon
+## Local voice transcription
 
 Voice messages are transcribed entirely on the machine running the server. No
 speech API, paid service, API key, or audio upload to a transcription provider
 is used. The server accepts WebM, Ogg, M4A/MP4, WAV, MP3, and FLAC audio up to
 20 MB, converts it to 16 kHz mono WAV with `ffmpeg`, and runs `whisper-cli`.
 
-From this project's root, install the build and conversion tools with
-[Homebrew](https://brew.sh/):
+Install FFmpeg and the tools needed to build
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) before starting the
+application. The commands below install and build the native tools; the later
+application setup remains the same on every platform.
+
+### macOS
+
+Install CMake and FFmpeg with [Homebrew](https://brew.sh/):
 
 ```bash
 brew install cmake ffmpeg
 ```
 
-Build the official [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
-source in a sibling directory. Its default macOS build uses Apple Silicon
-acceleration:
+Build the official whisper.cpp source in a sibling directory. Its default build
+uses Metal acceleration on Apple Silicon:
 
 ```bash
 git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
 cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
 cmake --build ../whisper.cpp/build --config Release -j
+export FFMPEG_PATH="$(command -v ffmpeg)"
+export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
+ffmpeg -version | head -n 1
+"$WHISPER_CPP_PATH" --help
 ```
 
-Download the multilingual `base` model to the path used by this app:
+### Linux (Debian or Ubuntu)
+
+Install the compiler, CMake, Git, curl, and FFmpeg, then build whisper.cpp:
+
+```bash
+sudo apt update
+sudo apt install build-essential cmake curl ffmpeg git
+git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
+cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ../whisper.cpp/build --config Release -j
+export FFMPEG_PATH="$(command -v ffmpeg)"
+export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
+ffmpeg -version | head -n 1
+"$WHISPER_CPP_PATH" --help
+```
+
+Use the corresponding compiler, CMake, and FFmpeg packages on other Linux
+distributions.
+
+### Windows (PowerShell)
+
+Install Git, CMake, and a Windows build linked from the official
+[FFmpeg download page](https://ffmpeg.org/download.html). Add FFmpeg's `bin`
+directory to `PATH`, or retain the full path to `ffmpeg.exe` for the configuration
+below. Also install a C++ compiler; one supported option is Visual Studio 2022
+with the **Desktop development with C++** workload. Ensure `git` and `cmake` are
+available in a new PowerShell session, then build whisper.cpp:
+
+```powershell
+git clone https://github.com/ggml-org/whisper.cpp.git ..\whisper.cpp
+cmake -S ..\whisper.cpp -B ..\whisper.cpp\build -A x64
+cmake --build ..\whisper.cpp\build --config Release
+```
+
+With the Visual Studio CMake generator, the executable is commonly written to
+`..\whisper.cpp\build\bin\Release\whisper-cli.exe`. Some generators instead
+write `..\whisper.cpp\build\bin\whisper-cli.exe`; use the path that exists in
+your build. Configure and verify both executables in the same PowerShell session
+that will start the application:
+
+```powershell
+$env:FFMPEG_PATH = (Get-Command ffmpeg.exe).Source
+$env:WHISPER_CPP_PATH = (Resolve-Path "..\whisper.cpp\build\bin\Release\whisper-cli.exe").Path
+& $env:FFMPEG_PATH -version
+& $env:WHISPER_CPP_PATH --help
+```
+
+If `ffmpeg.exe` is not on `PATH`, assign its full path instead. PowerShell quotes
+paths containing spaces when assigning them; the quote characters are not part
+of the value. Do not put literal quote characters inside any executable-path
+environment variable, and point these variables directly to `.exe` files rather
+than `.cmd` or `.bat` wrappers.
+
+### Download and verify the model
+
+From the project root on macOS or Linux, download the multilingual `base` model
+and verify its SHA-1 digest:
 
 ```bash
 mkdir -p models
 curl --fail --location \
   --output models/ggml-base.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+export WHISPER_MODEL_PATH="$(pwd)/models/ggml-base.bin"
 ```
 
-Set the locally built executable path in the terminal that starts the app:
+Verify it with `shasum -a 1 models/ggml-base.bin` on macOS or
+`sha1sum models/ggml-base.bin` on Linux.
 
-```bash
-export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
-```
+On Windows PowerShell:
 
-Verify all three local requirements before starting the server:
-
-```bash
-ffmpeg -version | head -n 1
-"$WHISPER_CPP_PATH" --help
-shasum -a 1 models/ggml-base.bin
+```powershell
+New-Item -ItemType Directory -Force models | Out-Null
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
+  -OutFile "models\ggml-base.bin"
+Get-FileHash -Algorithm SHA1 "models\ggml-base.bin"
+$env:WHISPER_MODEL_PATH = (Resolve-Path "models\ggml-base.bin").Path
 ```
 
 The expected SHA-1 for `ggml-base.bin` is
-`465707469ff3a37a2b9b8d8f89f2f99de7299dac`. The model is ignored by Git.
-If you store it elsewhere, set an absolute or project-relative path:
+`465707469ff3a37a2b9b8d8f89f2f99de7299dac`. The model is ignored by Git. An
+absolute model path is recommended; project-relative paths are resolved from
+the repository root. `FFMPEG_PATH` and `WHISPER_CPP_PATH` may be either native
+executable names on `PATH` or full paths. Full paths containing spaces work
+without extra escaping because the server does not invoke a shell.
 
-```bash
-export WHISPER_MODEL_PATH=/absolute/path/to/ggml-base.bin
-```
-
-`FFMPEG_PATH` can override the `ffmpeg` executable, and
-`AUDIO_TRANSCRIPTION_TIMEOUT_MS` can override the 120-second timeout. Missing
-tools, an unreadable model, unsupported audio bytes, empty speech, command
-failures, and timeouts are returned as errors; the app does not send a fake or
-empty transcript to Codex.
+After the tools and model have been installed, keep these environment variables
+set and start the application using the commands in [Setup](#setup).
+`AUDIO_TRANSCRIPTION_TIMEOUT_MS` can override the 120-second per-command
+timeout. Missing tools, an unreadable model, unsupported audio bytes, empty
+speech, command failures, and timeouts are returned as errors; the app does not
+send a fake or empty transcript to Codex. If a timed-out native process does not
+confirm that it has closed, the server retains that request's temporary audio
+directory rather than risk deleting files that are still in use. Such uncommon
+directories remain in the operating system's temporary-files location for
+system or manual cleanup.
 
 ## Setup
 

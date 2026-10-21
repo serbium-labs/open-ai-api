@@ -36,19 +36,57 @@ export type AudioTranscriptionServiceDependencies = {
 };
 
 const MAX_DIAGNOSTIC_LENGTH = 4_000;
+const TERMINATION_GRACE_MS = 1_000;
 
-export const runLocalCommand: CommandRunner = (
+export class LocalAudioCommandTimeoutError extends Error {
+  public constructor(
+    command: string,
+    timeoutMs: number,
+    public readonly terminationConfirmed: boolean,
+  ) {
+    super(`Local audio command timed out after ${timeoutMs} ms: ${command}`);
+    this.name = "LocalAudioCommandTimeoutError";
+  }
+}
+
+export const runLocalCommand = (
   command: string,
   args: string[],
   timeoutMs: number,
+  spawnCommand: typeof spawn = spawn,
 ): Promise<void> =>
   new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawnCommand(command, args, {
       shell: false,
       stdio: ["ignore", "ignore", "pipe"],
     });
     let diagnostic = "";
     let settled = false;
+    let timedOut = false;
+    let timer: NodeJS.Timeout;
+    let terminationTimer: NodeJS.Timeout | undefined;
+
+    const clearTimers = (): void => {
+      clearTimeout(timer);
+
+      if (terminationTimer !== undefined) {
+        clearTimeout(terminationTimer);
+      }
+    };
+
+    const rejectTimeout = (terminationConfirmed: boolean): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimers();
+      reject(new LocalAudioCommandTimeoutError(
+        command,
+        timeoutMs,
+        terminationConfirmed,
+      ));
+    };
 
     child.stderr.setEncoding(UTF8_ENCODING);
     child.stderr.on("data", (chunk: string) => {
@@ -57,25 +95,33 @@ export const runLocalCommand: CommandRunner = (
       );
     });
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       if (settled) {
         return;
       }
 
-      settled = true;
-      child.kill("SIGKILL");
-      reject(new Error(
-        `Local audio command timed out after ${timeoutMs} ms: ${command}`,
-      ));
+      timedOut = true;
+      terminationTimer = setTimeout(
+        () => rejectTimeout(false),
+        TERMINATION_GRACE_MS,
+      );
+
+      try {
+        child.kill("SIGKILL");
+      } catch {}
     }, timeoutMs);
 
-    child.once("error", (error: NodeJS.ErrnoException) => {
+    child.on("error", (error: NodeJS.ErrnoException) => {
       if (settled) {
         return;
       }
 
+      if (timedOut) {
+        return;
+      }
+
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
       reject(
         error.code === "ENOENT"
           ? new Error(
@@ -90,8 +136,13 @@ export const runLocalCommand: CommandRunner = (
         return;
       }
 
+      if (timedOut) {
+        rejectTimeout(true);
+        return;
+      }
+
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
 
       if (code === 0) {
         resolve();
@@ -139,6 +190,7 @@ export class AudioTranscriptionService implements AudioTranscriber {
     );
     const wavPath = join(temporaryDirectory, "normalized.wav");
     const outputPrefix = join(temporaryDirectory, "transcript");
+    let cleanupIsSafe = true;
 
     try {
       await this.runCommand(
@@ -204,11 +256,22 @@ export class AudioTranscriptionService implements AudioTranscriber {
       }
 
       return transcript;
+    } catch (error: unknown) {
+      if (
+        error instanceof LocalAudioCommandTimeoutError &&
+        !error.terminationConfirmed
+      ) {
+        cleanupIsSafe = false;
+      }
+
+      throw error;
     } finally {
-      await rm(temporaryDirectory, {
-        recursive: true,
-        force: true,
-      }).catch(() => {});
+      if (cleanupIsSafe) {
+        await rm(temporaryDirectory, {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+      }
     }
   }
 }

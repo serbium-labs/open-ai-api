@@ -2,16 +2,31 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
   type ReactElement,
 } from "react";
 
 import { Icon } from "@components/Icon";
 
+type ResourceLoadStatus = "loading" | "loaded" | "error";
+
 export type AudioPlayerProps = {
   src: string;
   label: string;
+  waveform?: number[];
 };
+
+export type AudioDurationProbe = {
+  src: string;
+  startTime: number;
+};
+
+const DEFAULT_WAVEFORM: number[] = [
+  0.32, 0.48, 0.72, 0.45, 0.88, 0.61, 0.38, 0.76,
+  0.54, 0.92, 0.68, 0.42, 0.58, 0.81, 0.47, 0.7,
+  0.36, 0.63, 0.86, 0.52, 0.73, 0.44, 0.66, 0.34,
+];
 
 export function formatAudioTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -25,23 +40,89 @@ export function formatAudioTime(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
+export function getAudioDuration(
+  audio: Pick<HTMLAudioElement, "duration" | "seekable">,
+): number | undefined {
+  if (Number.isFinite(audio.duration) && audio.duration > 0) {
+    return audio.duration;
+  }
+
+  if (audio.seekable.length > 0) {
+    const seekableEnd: number = audio.seekable.end(
+      audio.seekable.length - 1,
+    );
+
+    if (Number.isFinite(seekableEnd) && seekableEnd > 0) {
+      return seekableEnd;
+    }
+  }
+
+  return undefined;
+}
+
+export function getDurationProbeRestoreTime(
+  probe: AudioDurationProbe | null,
+  src: string,
+): number | undefined {
+  return probe?.src === src ? probe.startTime : undefined;
+}
+
+export function getSeekTime(
+  pointerX: number,
+  left: number,
+  width: number,
+  duration: number,
+): number | undefined {
+  if (width <= 0 || !Number.isFinite(duration) || duration <= 0) {
+    return undefined;
+  }
+
+  const ratio: number = Math.min(
+    1,
+    Math.max(0, (pointerX - left) / width),
+  );
+
+  return ratio * duration;
+}
+
+export function getPlaybackProgress(
+  currentTime: number,
+  duration: number,
+): number {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, currentTime / duration));
+}
+
+export function getVoicePlaybackLabel(isPlaying: boolean): string {
+  return isPlaying ? "Pause voice" : "Play voice";
+}
+
 export function AudioPlayer({
   src,
   label,
+  waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const durationProbeRef = useRef<AudioDurationProbe | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackError, setPlaybackError] = useState<string>("");
+  const [loadStatus, setLoadStatus] =
+    useState<ResourceLoadStatus>("loading");
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
 
+    durationProbeRef.current = null;
     setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
+    setLoadStatus("loading");
 
     return () => {
       audio?.pause();
@@ -49,12 +130,64 @@ export function AudioPlayer({
   }, [src]);
 
   function updateDuration(): void {
-    const nextDuration: number = audioRef.current?.duration ?? 0;
-    setDuration(Number.isFinite(nextDuration) ? nextDuration : 0);
+    const audio: HTMLAudioElement | null = audioRef.current;
+
+    if (audio === null) {
+      return;
+    }
+
+    if (
+      durationProbeRef.current !== null &&
+      durationProbeRef.current.src !== src
+    ) {
+      durationProbeRef.current = null;
+    }
+
+    const nextDuration: number | undefined = getAudioDuration(audio);
+
+    if (nextDuration !== undefined) {
+      setDuration(nextDuration);
+
+      const restoreTime: number | undefined =
+        getDurationProbeRestoreTime(durationProbeRef.current, src);
+
+      durationProbeRef.current = null;
+
+      if (restoreTime !== undefined) {
+        audio.currentTime = restoreTime;
+      }
+    } else if (
+      audio.duration === Number.POSITIVE_INFINITY &&
+      durationProbeRef.current === null
+    ) {
+      // MediaRecorder WebM blobs can omit duration metadata. Seeking forces
+      // browsers to discover the actual end and emit another duration update.
+      durationProbeRef.current = {
+        src,
+        startTime: audio.currentTime,
+      };
+      audio.currentTime = Number.MAX_SAFE_INTEGER;
+    }
   }
 
   function updateCurrentTime(): void {
-    setCurrentTime(audioRef.current?.currentTime ?? 0);
+    updateDuration();
+
+    if (durationProbeRef.current === null) {
+      setCurrentTime(audioRef.current?.currentTime ?? 0);
+    }
+  }
+
+  function cancelDurationProbe(): void {
+    const audio: HTMLAudioElement | null = audioRef.current;
+    const restoreTime: number | undefined =
+      getDurationProbeRestoreTime(durationProbeRef.current, src);
+
+    durationProbeRef.current = null;
+
+    if (audio !== null && restoreTime !== undefined) {
+      audio.currentTime = restoreTime;
+    }
   }
 
   async function togglePlayback(): Promise<void> {
@@ -63,6 +196,8 @@ export function AudioPlayer({
     if (audio === null) {
       return;
     }
+
+    cancelDurationProbe();
 
     if (!audio.paused) {
       audio.pause();
@@ -78,21 +213,61 @@ export function AudioPlayer({
     }
   }
 
-  function seek(event: ChangeEvent<HTMLInputElement>): void {
+  function seekTo(nextTime: number): void {
     const audio: HTMLAudioElement | null = audioRef.current;
 
-    if (audio === null) {
+    if (audio === null || duration <= 0) {
       return;
     }
 
-    const nextTime: number = Number(event.target.value);
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
+    cancelDurationProbe();
+
+    const boundedTime: number = Math.min(duration, Math.max(0, nextTime));
+    audio.currentTime = boundedTime;
+    setCurrentTime(boundedTime);
   }
 
-  const playbackLabel: string = isPlaying
-    ? `Pause ${label}`
-    : `Play ${label}`;
+  function seekFromWaveform(event: MouseEvent<HTMLDivElement>): void {
+    const bounds: DOMRect = event.currentTarget.getBoundingClientRect();
+    const nextTime: number | undefined = getSeekTime(
+      event.clientX,
+      bounds.left,
+      bounds.width,
+      duration,
+    );
+
+    if (nextTime !== undefined) {
+      seekTo(nextTime);
+    }
+  }
+
+  function seekWithKeyboard(event: KeyboardEvent<HTMLDivElement>): void {
+    let nextTime: number | undefined;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      nextTime = currentTime + 5;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      nextTime = currentTime - 5;
+    } else if (event.key === "Home") {
+      nextTime = 0;
+    } else if (event.key === "End") {
+      nextTime = duration;
+    }
+
+    if (nextTime !== undefined) {
+      event.preventDefault();
+      seekTo(nextTime);
+    }
+  }
+
+  const playbackLabel: string = getVoicePlaybackLabel(isPlaying);
+  const waveformValues: number[] =
+    waveform !== undefined && waveform.length > 0
+      ? waveform
+      : DEFAULT_WAVEFORM;
+  const progress: number = getPlaybackProgress(currentTime, duration);
+  const seekLabel: string = `Seek ${label}`;
+  const isLoading: boolean = loadStatus === "loading";
 
   return (
     <div className="audio-player">
@@ -100,9 +275,18 @@ export function AudioPlayer({
         ref={audioRef}
         src={src}
         preload="metadata"
-        onCanPlay={() => setPlaybackError("")}
+        onCanPlay={() => {
+          setPlaybackError("");
+          setLoadStatus("loaded");
+          updateDuration();
+        }}
         onDurationChange={updateDuration}
-        onLoadedMetadata={updateDuration}
+        onLoadedMetadata={() => {
+          setPlaybackError("");
+          setLoadStatus("loaded");
+          updateDuration();
+        }}
+        onProgress={updateDuration}
         onTimeUpdate={updateCurrentTime}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -113,14 +297,25 @@ export function AudioPlayer({
         onError={() => {
           setIsPlaying(false);
           setPlaybackError("Audio could not be loaded.");
+          setLoadStatus("error");
         }}
       />
 
+      {isLoading ? (
+        <span
+          className="message-resource-skeleton message-audio-skeleton"
+          role="status"
+          aria-label={`Loading ${label}`}
+        />
+      ) : null}
       <button
         className="audio-play-button icon-tooltip"
         type="button"
+        hidden={loadStatus !== "loaded"}
+        disabled={loadStatus !== "loaded"}
         aria-label={playbackLabel}
         data-tooltip={playbackLabel}
+        data-tooltip-placement="top"
         onClick={() => {
           void togglePlayback();
         }}
@@ -128,18 +323,49 @@ export function AudioPlayer({
         <Icon name={isPlaying ? "pause" : "play"} />
       </button>
 
-      <div className="audio-progress-group">
-        <input
-          className="audio-progress"
-          type="range"
-          min="0"
-          max={duration || 0}
-          step="0.1"
-          value={Math.min(currentTime, duration || 0)}
-          disabled={duration <= 0}
-          aria-label={`Seek ${label}`}
-          onChange={seek}
-        />
+      <div
+        className="audio-progress-group"
+        hidden={loadStatus !== "loaded"}
+      >
+        <div
+          className="audio-waveform"
+          role="slider"
+          tabIndex={duration > 0 ? 0 : -1}
+          aria-label={seekLabel}
+          aria-valuemin={0}
+          aria-valuemax={duration}
+          aria-valuenow={Math.min(currentTime, duration)}
+          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioTime(duration)}`}
+          aria-disabled={duration <= 0}
+          aria-busy={duration <= 0 && playbackError === ""}
+          onClick={seekFromWaveform}
+          onKeyDown={seekWithKeyboard}
+        >
+          <div className="audio-waveform-bars" aria-hidden="true">
+            {waveformValues.map((value: number, index: number) => (
+              <span
+                key={index}
+                style={{ height: `${Math.max(4, value * 28)}px` }}
+              />
+            ))}
+          </div>
+          <div
+            className="audio-waveform-progress"
+            style={{
+              clipPath: `inset(0 ${100 - progress * 100}% 0 0)`,
+            }}
+            aria-hidden="true"
+          >
+            <div className="audio-waveform-bars">
+              {waveformValues.map((value: number, index: number) => (
+                <span
+                  key={index}
+                  style={{ height: `${Math.max(4, value * 28)}px` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
 
         <span className="audio-time" aria-live="off">
           {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
