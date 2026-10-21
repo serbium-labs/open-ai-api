@@ -40,6 +40,12 @@ export function formatAudioTime(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
+export function formatAudioDuration(seconds: number): string {
+  return Number.isFinite(seconds) && seconds > 0
+    ? formatAudioTime(seconds)
+    : "--:--";
+}
+
 export function getAudioDuration(
   audio: Pick<HTMLAudioElement, "duration" | "seekable">,
 ): number | undefined {
@@ -335,7 +341,7 @@ export function AudioPlayer({
           aria-valuemin={0}
           aria-valuemax={duration}
           aria-valuenow={Math.min(currentTime, duration)}
-          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioTime(duration)}`}
+          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioDuration(duration)}`}
           aria-disabled={duration <= 0}
           aria-busy={duration <= 0 && playbackError === ""}
           onClick={seekFromWaveform}
@@ -368,7 +374,7 @@ export function AudioPlayer({
         </div>
 
         <span className="audio-time" aria-live="off">
-          {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
+          {formatAudioTime(currentTime)} / {formatAudioDuration(duration)}
         </span>
       </div>
 

@@ -72,6 +72,83 @@ test("appendPromptTurn puts the user attachment before the pending assistant", (
   assert.equal(result.messages[1]?.status, "pending");
 });
 
+test("pending voice turns show audio processing without an empty assistant container", () => {
+  const turn = appendPromptTurn([], "", [{
+    name: "voice-message.webm",
+    mimeType: "audio/webm",
+    path: "",
+    previewUrl: "blob:voice-preview",
+  }]);
+  const markup: string = renderToStaticMarkup(
+    createElement(ChatTranscript, {
+      chatId: undefined,
+      messages: turn.messages,
+    }),
+  );
+
+  assert.match(markup, /Processing audio\.\.\./);
+  assert.doesNotMatch(markup, />Thinking</);
+  assert.equal(markup.match(/class="message-content"/g)?.length, 1);
+  assert.match(
+    markup,
+    /class="chat-message chat-message-assistant chat-message-pending"[^>]*><\/article>/,
+  );
+});
+
+test("text-only pending turns keep the thinking indicator", () => {
+  const turn = appendPromptTurn([], "Hello");
+  const markup: string = renderToStaticMarkup(
+    createElement(ChatTranscript, {
+      chatId: undefined,
+      messages: turn.messages,
+    }),
+  );
+
+  assert.match(markup, />Thinking</);
+  assert.doesNotMatch(markup, /Processing audio\.\.\./);
+});
+
+test("completed and failed voice turns remove audio processing status", () => {
+  const attachment: ChatMessageAttachment = {
+    name: "voice-message.webm",
+    mimeType: "audio/webm",
+    path: "voice-message.webm",
+  };
+
+  for (const assistant of [
+    {
+      id: "message-2",
+      role: "assistant" as const,
+      content: "Done",
+      status: "complete" as const,
+      attachments: [],
+    },
+    {
+      id: "message-2",
+      role: "assistant" as const,
+      content: "Transcription failed",
+      status: "error" as const,
+      attachments: [],
+    },
+  ]) {
+    const markup: string = renderToStaticMarkup(
+      createElement(ChatTranscript, {
+        chatId: "chat-1",
+        messages: [{
+          id: "message-1",
+          role: "user",
+          content: "",
+          status: "complete",
+          attachments: [attachment],
+        }, assistant],
+      }),
+    );
+
+    assert.doesNotMatch(markup, /Processing audio\.\.\./);
+    assert.match(markup, new RegExp(assistant.content));
+  }
+});
+
 test("isSystemVoiceFilename only identifies generated voice recording names", () => {
   assert.equal(isSystemVoiceFilename("voice-message-179231823782.webm"), true);
   assert.equal(isSystemVoiceFilename("voice-message-179231823782.ogg"), true);

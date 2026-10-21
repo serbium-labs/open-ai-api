@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   AudioPlayer,
+  formatAudioDuration,
   formatAudioTime,
   getAudioDuration,
   getDurationProbeRestoreTime,
@@ -16,6 +17,15 @@ test("formatAudioTime formats finite durations", () => {
   assert.equal(formatAudioTime(0), "0:00");
   assert.equal(formatAudioTime(65.9), "1:05");
   assert.equal(formatAudioTime(Number.NaN), "0:00");
+});
+
+test("formatAudioDuration distinguishes unresolved duration from zero time", () => {
+  assert.equal(formatAudioDuration(0), "--:--");
+  assert.equal(formatAudioDuration(Number.NaN), "--:--");
+  assert.equal(formatAudioDuration(Number.POSITIVE_INFINITY), "--:--");
+  assert.equal(formatAudioDuration(Number.NEGATIVE_INFINITY), "--:--");
+  assert.equal(formatAudioDuration(-1), "--:--");
+  assert.equal(formatAudioDuration(12.4), "0:12");
 });
 
 test("getAudioDuration reads ordinary finite durations", () => {
@@ -132,6 +142,9 @@ test("AudioPlayer renders a loader while metadata is pending", () => {
   assert.match(markup, /aria-label="Loading voice-message\.webm"/);
   assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
+  assert.match(markup, /0:00 \/ --:--/);
+  assert.doesNotMatch(markup, /0:00 \/ 0:00/);
+  assert.match(markup, /aria-disabled="true"/);
 });
 
 test("getSeekTime maps and clamps waveform clicks to playback time", () => {
