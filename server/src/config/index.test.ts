@@ -29,6 +29,19 @@ test("root .env loads without overriding existing environment values", async () 
   }
 });
 
+test("missing root .env fails with an actionable error", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "missing-root-env-test-"));
+
+  try {
+    assert.throws(
+      () => loadRootEnvironment(directory, {}),
+      /Missing required environment file: .*\.env.*Copy \.env\.example to \.env/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("SERVER_PORT takes precedence over legacy PORT", () => {
   assert.equal(createServerConfig({ SERVER_PORT: "4001", PORT: "4002" }).port, 4001);
   assert.equal(createServerConfig({ PORT: "4002" }).port, 4002);

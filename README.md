@@ -340,7 +340,7 @@ cd open-ai-api
 ```
 
 If you already have a checkout, open a terminal in that existing repository
-root instead. Create the optional local configuration from the safe example:
+root instead. Create the required local configuration from the safe example:
 
 ```bash
 cp .env.example .env
@@ -627,7 +627,7 @@ Development conventions are documented in `DEVELOPMENT.md`.
 
 The server creates a Codex SDK client without passing an API key. The Codex
 process therefore picks up the existing local Codex authentication session.
-An `OPENAI_API_KEY` is not required for this setup. The optional `.env` file is
+An `OPENAI_API_KEY` is not required for this setup. The required `.env` file is
 for local runtime settings and does not change the Codex authentication flow.
 
 The session belongs to the operating-system user running the server. If the
@@ -772,6 +772,10 @@ current model is deprecated or if you want a different model for all browser
 chat requests handled by this app.
 
 ## Environment Variables
+
+The server requires a `.env` file in the repository root and exits with code 1
+and an actionable error when the file is absent or unreadable. Individual
+variables remain optional when the table below documents a safe default.
 
 | Variable | Required | Description |
 | --- | --- | --- |

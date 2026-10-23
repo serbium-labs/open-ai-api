@@ -45,11 +45,27 @@ export function loadRootEnvironment(
   repositoryRoot: string = getRepositoryRoot(),
   environment: NodeJS.ProcessEnv = process.env,
 ): void {
-  loadDotEnv({
-    path: join(repositoryRoot, ".env"),
+  const environmentFilePath = join(repositoryRoot, ".env");
+
+  if (!existsSync(environmentFilePath)) {
+    throw new Error(
+      `Missing required environment file: ${environmentFilePath}. ` +
+        "Copy .env.example to .env and review its values before starting the server.",
+    );
+  }
+
+  const result = loadDotEnv({
+    path: environmentFilePath,
     processEnv: environment as Record<string, string>,
     override: false,
   });
+
+  if (result.error !== undefined) {
+    throw new Error(
+      `Failed to load environment file: ${environmentFilePath}. ${result.error.message}`,
+      { cause: result.error },
+    );
+  }
 }
 
 function readPort(
