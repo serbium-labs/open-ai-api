@@ -37,6 +37,8 @@ const DEFAULT_RUNTIME_PLATFORM: RuntimePlatform = {
   platform: process.platform,
 };
 
+const REQUIRED_ENVIRONMENT_VARIABLES = ["WHISPER_MODEL_PATH"] as const;
+
 export function getRepositoryRoot(): string {
   return resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 }
@@ -64,6 +66,17 @@ export function loadRootEnvironment(
     throw new Error(
       `Failed to load environment file: ${environmentFilePath}. ${result.error.message}`,
       { cause: result.error },
+    );
+  }
+
+  const missingVariables = REQUIRED_ENVIRONMENT_VARIABLES.filter(
+    (name) => result.parsed?.[name]?.trim() === "" || result.parsed?.[name] === undefined,
+  );
+
+  if (missingVariables.length > 0) {
+    throw new Error(
+      `Missing required environment variables in .env: ${missingVariables.join(", ")}. ` +
+        "Please check .env.example.",
     );
   }
 }
