@@ -1,4 +1,11 @@
-FROM node:22-bookworm AS whisper-builder
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_VERSION=22-bookworm
+ARG WHISPER_REVISION=927cfce34f31707e17f2bff35c349632fb9e2c3a
+
+FROM node:${NODE_VERSION} AS whisper-builder
+
+ARG WHISPER_REVISION
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
@@ -6,30 +13,35 @@ RUN apt-get update \
         ca-certificates \
         cmake \
         curl \
-        git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-RUN git clone --filter=blob:none https://github.com/ggml-org/whisper.cpp.git \
-        whisper.cpp \
-    && cd whisper.cpp \
-    && git checkout --detach 927cfce34f31707e17f2bff35c349632fb9e2c3a \
-    && test "$(git rev-parse HEAD)" = "927cfce34f31707e17f2bff35c349632fb9e2c3a" \
-    && cmake -S . -B build \
+# Build for Docker's target architecture. Disabling native CPU tuning keeps the
+# result portable between machines of the same architecture; static project
+# libraries make the runtime independent of whisper.cpp build-tree .so files.
+RUN curl --fail --location --retry 3 \
+        --output whisper.cpp.tar.gz \
+        "https://github.com/ggml-org/whisper.cpp/archive/${WHISPER_REVISION}.tar.gz" \
+    && mkdir whisper.cpp \
+    && tar --extract --gzip --file whisper.cpp.tar.gz \
+        --directory whisper.cpp --strip-components=1 \
+    && cmake -S whisper.cpp -B whisper.cpp/build \
         -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
         -DGGML_NATIVE=OFF \
-        -DWHISPER_BUILD_TESTS=OFF \
         -DWHISPER_BUILD_EXAMPLES=ON \
-    && cmake --build build --config Release --target whisper-cli --parallel
+        -DWHISPER_BUILD_TESTS=OFF \
+    && cmake --build whisper.cpp/build \
+        --config Release --target whisper-cli --parallel
 
 RUN curl --fail --location --retry 3 \
-        --output /build/ggml-base.bin \
+        --output ggml-base.bin \
         https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin \
-    && echo "465707469ff3a37a2b9b8d8f89f2f99de7299dac  /build/ggml-base.bin" \
+    && echo "465707469ff3a37a2b9b8d8f89f2f99de7299dac  ggml-base.bin" \
         | sha1sum --check --strict
 
-FROM node:22-bookworm AS dependencies
+FROM node:${NODE_VERSION} AS dependencies
 
 WORKDIR /app
 
@@ -39,10 +51,12 @@ COPY server/package.json server/package.json
 
 RUN npm ci
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:${NODE_VERSION}-slim AS development
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates ffmpeg \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -55,15 +69,19 @@ ENV NODE_ENV=development \
     WHISPER_MODEL_PATH=/opt/whisper/models/ggml-base.bin
 
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
-COPY --from=whisper-builder /build/whisper.cpp/build/bin/ /opt/whisper/bin/
-COPY --from=whisper-builder /build/ggml-base.bin /opt/whisper/models/ggml-base.bin
+COPY --from=whisper-builder \
+    /build/whisper.cpp/build/bin/whisper-cli \
+    /opt/whisper/bin/whisper-cli
+COPY --from=whisper-builder \
+    /build/ggml-base.bin \
+    /opt/whisper/models/ggml-base.bin
 COPY --chown=node:node . .
 
 RUN mkdir -p /app/chats /home/node/.codex \
     && chown -R node:node /app/chats /home/node/.codex \
-    && chmod -R a+rX /opt/whisper
-
-ENV LD_LIBRARY_PATH=/opt/whisper/bin
+    && chmod 0755 /opt/whisper/bin/whisper-cli \
+    && ffmpeg -version >/dev/null \
+    && /opt/whisper/bin/whisper-cli --help >/dev/null
 
 USER node
 

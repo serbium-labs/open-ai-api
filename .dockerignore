@@ -4,6 +4,8 @@
 .agents
 .codex
 .aws
+.vscode
+.idea
 
 .env
 .env.*
@@ -28,6 +30,8 @@ coverage
 
 .dev-server-pids.json
 *.log
+*.swp
+*.swo
 .DS_Store
 code-to-edit
 responses
