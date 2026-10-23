@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    init: true
+    env_file:
+      - .env
+    environment:
+      CODEX_HOME: /home/node/.codex
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      WHISPER_CPP_PATH: /opt/whisper/bin/whisper-cli
+      WHISPER_MODEL_PATH: /opt/whisper/models/ggml-base.bin
+    ports:
+      - "${CLIENT_PORT:-5173}:${CLIENT_PORT:-5173}"
+    volumes:
+      # Live source editing; image-provided dependencies stay in their own volume.
+      - type: bind
+        source: .
+        target: /app
+      - type: volume
+        source: node_modules
+        target: /app/node_modules
+      # Keep chat history in the repository and reuse the host Codex login.
+      - type: bind
+        source: ./chats
+        target: /app/chats
+      - type: bind
+        source: ${CODEX_AUTH_DIR:-${HOME}/.codex}
+        target: /home/node/.codex
+
+volumes:
+  node_modules:

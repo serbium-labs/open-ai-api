@@ -26,6 +26,7 @@ import {
   loadConversation,
   type ConversationState,
 } from "./conversationState";
+import { advanceComposerSessionId } from "./composerSession";
 
 import {
   createInitialSidebarState,
@@ -34,6 +35,10 @@ import {
   reduceSidebarState,
   saveSidebarPreferences,
 } from "./sidebarState";
+import {
+  getChatHistoryTooltipPosition,
+  getResourcesTooltipPosition,
+} from "./sidebarTooltips";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -67,6 +72,7 @@ function getLocalStorage(): Storage | undefined {
 
 export function App(): ReactElement {
   const optimisticAttachmentUrlsRef = useRef<Set<string>>(new Set());
+  const [composerSessionId, setComposerSessionId] = useState<number>(0);
   const [prompt, setPrompt] = useState<string>("");
   const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
@@ -79,10 +85,19 @@ export function App(): ReactElement {
     () => createInitialSidebarState(isMobileViewport(), loadSidebarPreferences(getLocalStorage())),
   );
   const { isChatHistoryOpen, isResourcesOpen } = sidebarState;
+  const chatHistoryTooltipPosition = getChatHistoryTooltipPosition(
+    isChatHistoryOpen,
+    isResourcesOpen,
+  );
+  const resourcesTooltipPosition = getResourcesTooltipPosition(
+    isResourcesOpen,
+    isChatHistoryOpen,
+  );
   const [chatListStatus, setChatListStatus] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
   const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
   const resourceNavigationRequestId = useRef<number>(0);
+  const openChatRequestId = useRef<number>(0);
   const isBusy: boolean = isRunning || deletingChatId !== undefined;
 
   useEffect(() => {
@@ -166,12 +181,27 @@ export function App(): ReactElement {
   }, []);
 
   async function openChat(chatId: string): Promise<void> {
-    if (isBusy || chatId === currentChatId) {
+    if (isBusy) {
       return;
     }
 
-    setConversationState(await loadConversation(chatId, fetchChat));
+    openChatRequestId.current += 1;
+
+    if (chatId === currentChatId) {
+      return;
+    }
+
+    const requestId: number = openChatRequestId.current;
+    const nextConversation: ConversationState =
+      await loadConversation(chatId, fetchChat);
+
+    if (requestId !== openChatRequestId.current) {
+      return;
+    }
+
+    setConversationState(nextConversation);
     setPrompt("");
+    setComposerSessionId(advanceComposerSessionId);
   }
 
   function handleNewChat(): void {
@@ -179,8 +209,10 @@ export function App(): ReactElement {
       return;
     }
 
+    openChatRequestId.current += 1;
     setConversationState(createFreshConversationState());
     setPrompt("");
+    setComposerSessionId(advanceComposerSessionId);
   }
 
   async function handleRenameChat(chat: ChatSummary): Promise<void> {
@@ -304,6 +336,7 @@ export function App(): ReactElement {
       if (chat.id === currentChatId) {
         setConversationState(createFreshConversationState());
         setPrompt("");
+        setComposerSessionId(advanceComposerSessionId);
       }
     } catch (error: unknown) {
       setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
@@ -443,7 +476,8 @@ export function App(): ReactElement {
         }
         aria-expanded={isChatHistoryOpen}
         data-tooltip={isChatHistoryOpen ? UI_TEXT.hideChatHistoryTooltip : UI_TEXT.chatHistoryTooltip}
-        data-tooltip-placement="right"
+        data-tooltip-placement={chatHistoryTooltipPosition.placement}
+        data-tooltip-align={chatHistoryTooltipPosition.align}
         onClick={toggleChatHistory}
       >
         {isChatHistoryOpen ? (
@@ -491,6 +525,7 @@ export function App(): ReactElement {
               resourceNavigationTarget={resourceNavigationTarget}
             />
             <PromptForm
+              key={composerSessionId}
               prompt={prompt}
               isRunning={isBusy}
               submitError={submitError}
@@ -523,7 +558,8 @@ export function App(): ReactElement {
         }
         aria-expanded={isResourcesOpen}
         data-tooltip={isResourcesOpen ? UI_TEXT.hideResourcesTooltip : UI_TEXT.resourcesTooltip}
-        data-tooltip-placement="left"
+        data-tooltip-placement={resourcesTooltipPosition.placement}
+        data-tooltip-align={resourcesTooltipPosition.align}
         onClick={toggleResources}
       >
         {isResourcesOpen ? (
