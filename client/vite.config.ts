@@ -78,6 +78,17 @@ export function createViteConfig(
         "/api": {
           target: `http://localhost:${ports.serverPort}`,
           changeOrigin: true,
+          configure(proxy) {
+            proxy.on("error", (_error, _request, response) => {
+              if (response.headersSent || response.writableEnded) {
+                return;
+              }
+
+              response
+                .writeHead(503, { "Content-Type": "application/json" })
+                .end(JSON.stringify({ error: "Server is starting..." }));
+            });
+          },
         },
       },
     },
