@@ -9,6 +9,10 @@ services:
       - .env
     environment:
       CODEX_HOME: /home/node/.codex
+      HOME: /home/node
+      XDG_CACHE_HOME: /home/node/.codex/cache
+      XDG_CONFIG_HOME: /home/node/.codex/config
+      TMPDIR: /home/node/.codex/tmp
       FFMPEG_PATH: /usr/bin/ffmpeg
       WHISPER_CPP_PATH: /opt/whisper/bin/whisper-cli
       WHISPER_MODEL_PATH: /opt/whisper/models/ggml-base.bin
@@ -22,13 +26,19 @@ services:
       - type: volume
         source: node_modules
         target: /app/node_modules
-      # Keep chat history in the repository and reuse the host Codex login.
+      # Keep chat history in the repository. Codex itself writes only to a
+      # Linux-managed volume; the host login is imported by the entrypoint.
       - type: bind
         source: ./chats
         target: /app/chats
+      - type: volume
+        source: codex_home
+        target: /home/node/.codex
       - type: bind
         source: ${CODEX_AUTH_DIR:-${HOME}/.codex}
-        target: /home/node/.codex
+        target: /codex-auth
+        read_only: true
 
 volumes:
   node_modules:
+  codex_home:

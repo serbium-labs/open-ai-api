@@ -130,6 +130,11 @@ export function AudioPlayer({
     setPlaybackError("");
     setLoadStatus("loading");
 
+    // Explicitly start metadata loading for a newly-created blob URL. Some
+    // Chromium builds (notably through Docker Desktop on Windows) otherwise
+    // defer the duration/seekable calculation until the first play().
+    audio?.load();
+
     return () => {
       audio?.pause();
     };
@@ -292,6 +297,7 @@ export function AudioPlayer({
           setLoadStatus("loaded");
           updateDuration();
         }}
+        onLoadedData={updateDuration}
         onProgress={updateDuration}
         onTimeUpdate={updateCurrentTime}
         onPlay={() => setIsPlaying(true)}

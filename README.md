@@ -110,7 +110,7 @@ Codex stores its configuration under `CODEX_HOME`, which defaults to `~/.codex`.
 
 ### Docker credential storage
 
-Docker Compose mounts the host Codex directory into the container. Credentials stored only in the operating system keychain are not available inside that container. If the Docker application reports an authentication error, configure file-backed credentials in `~/.codex/config.toml`:
+Docker Compose mounts the host Codex directory read-only at `/codex-auth`. On startup, `auth.json` and `config.toml` are copied into a writable Docker-managed `CODEX_HOME` volume. This avoids permission failures caused by Windows bind mounts while keeping Codex sessions and runtime files writable. Credentials stored only in the operating system keychain are not available inside the container. If the Docker application reports an authentication error, configure file-backed credentials in `~/.codex/config.toml`:
 
 ```toml
 cli_auth_credentials_store = "file"
@@ -146,7 +146,7 @@ Review every value before starting the application:
 | `FFMPEG_PATH` | No | `ffmpeg` | FFmpeg command name or executable path. Relative paths containing directory separators are resolved from the repository root. |
 | `WHISPER_CPP_PATH` | No | auto-detected | `whisper-cli` command or executable path. Leave it unset when using the provided setup script. |
 | `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | `120000` | Positive transcription timeout in milliseconds. Invalid or non-positive values fall back to the default. |
-| `CODEX_AUTH_DIR` | Docker only | `${HOME}/.codex` | Host directory mounted as the container's `CODEX_HOME`. This is consumed by Compose rather than the server. |
+| `CODEX_AUTH_DIR` | Docker only | `${HOME}/.codex` | Host directory from which `auth.json` and `config.toml` are imported into the writable container `CODEX_HOME`. This is consumed by Compose rather than the server. |
 
 Important configuration rules:
 
@@ -283,6 +283,10 @@ Create the root `.env` file from `.env.example`. The backend intentionally refus
 ### Codex authentication fails in Docker
 
 Run `codex login status` on the host, confirm that `CODEX_AUTH_DIR` points to the correct directory, and use file-backed credential storage as described in the Docker authentication section. Also confirm that Docker Desktop can mount the directory.
+
+### Codex reports `Permission denied` in Docker Desktop
+
+Rebuild and recreate the service so Compose uses the `codex_home` named volume. Codex writes sessions, cache, temporary files, and PATH aliases there instead of writing through the Windows bind mount. The host credential directory remains read-only and is used only as an import source.
 
 ### The client reports that the server is starting
 

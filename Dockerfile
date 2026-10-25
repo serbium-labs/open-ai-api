@@ -63,6 +63,10 @@ WORKDIR /app
 
 ENV NODE_ENV=development \
     CODEX_HOME=/home/node/.codex \
+    HOME=/home/node \
+    XDG_CACHE_HOME=/home/node/.codex/cache \
+    XDG_CONFIG_HOME=/home/node/.codex/config \
+    TMPDIR=/home/node/.codex/tmp \
     FFMPEG_PATH=/usr/bin/ffmpeg \
     PATH=/app/node_modules/.bin:$PATH \
     WHISPER_CPP_PATH=/opt/whisper/bin/whisper-cli \
@@ -77,8 +81,13 @@ COPY --from=whisper-builder \
     /opt/whisper/models/ggml-base.bin
 COPY --chown=node:node . .
 
-RUN mkdir -p /app/chats /home/node/.codex \
+RUN mkdir -p \
+        /app/chats \
+        /home/node/.codex/cache \
+        /home/node/.codex/config \
+        /home/node/.codex/tmp \
     && chown -R node:node /app/chats /home/node/.codex \
+    && chmod 0755 /app/scripts/docker-entrypoint.sh \
     && chmod 0755 /opt/whisper/bin/whisper-cli \
     && ffmpeg -version >/dev/null \
     && /opt/whisper/bin/whisper-cli --help >/dev/null
@@ -87,4 +96,5 @@ USER node
 
 EXPOSE 5173
 
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["npm", "start"]
