@@ -14,6 +14,7 @@ type ResourceLoadStatus = "loading" | "loaded" | "error";
 export type AudioPlayerProps = {
   src: string;
   label: string;
+  durationSeconds?: number;
   waveform?: number[];
 };
 
@@ -109,34 +110,39 @@ export function getVoicePlaybackLabel(isPlaying: boolean): string {
 export function AudioPlayer({
   src,
   label,
+  durationSeconds,
   waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
   const durationProbeRef = useRef<AudioDurationProbe | null>(null);
   const durationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [duration, setDuration] = useState<number>(0);
+  const initialDuration =
+    Number.isFinite(durationSeconds) && (durationSeconds ?? 0) > 0
+      ? durationSeconds as number
+      : 0;
+  const [duration, setDuration] = useState<number>(initialDuration);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackError, setPlaybackError] = useState<string>("");
   const [loadStatus, setLoadStatus] =
-    useState<ResourceLoadStatus>("loading");
+    useState<ResourceLoadStatus>(initialDuration > 0 ? "loaded" : "loading");
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
 
     durationProbeRef.current = null;
-    setDuration(0);
+    setDuration(initialDuration);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
-    setLoadStatus("loading");
+    setLoadStatus(initialDuration > 0 ? "loaded" : "loading");
 
     // Explicitly start metadata loading for a newly-created blob URL. Some
     // Chromium builds (notably through Docker Desktop on Windows) otherwise
     // defer the duration/seekable calculation until the first play().
     audio?.load();
 
-    if (audio !== null && !updateDuration()) {
+    if (initialDuration <= 0 && audio !== null && !updateDuration()) {
       durationPollRef.current = setInterval(updateDuration, 100);
     }
 
@@ -144,7 +150,7 @@ export function AudioPlayer({
       stopDurationPolling();
       audio?.pause();
     };
-  }, [src]);
+  }, [src, initialDuration]);
 
   function stopDurationPolling(): void {
     if (durationPollRef.current !== null) {

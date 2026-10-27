@@ -148,6 +148,22 @@ test("AudioPlayer renders a loader while metadata is pending", () => {
   assert.match(markup, /aria-disabled="true"/);
 });
 
+test("AudioPlayer immediately uses a server-provided duration", () => {
+  const markup: string = renderToStaticMarkup(
+    <AudioPlayer
+      src="/voice.webm"
+      label="voice-message.webm"
+      durationSeconds={4.25}
+    />,
+  );
+
+  assert.doesNotMatch(markup, /message-audio-skeleton/);
+  assert.match(markup, /0:00 \/ 0:04/);
+  assert.match(markup, /aria-valuemax="4.25"/);
+  assert.match(markup, /tabindex="0"/);
+  assert.match(markup, /aria-disabled="false"/);
+});
+
 test("getSeekTime maps and clamps waveform clicks to playback time", () => {
   assert.equal(getSeekTime(150, 100, 200, 80), 20);
   assert.equal(getSeekTime(50, 100, 200, 80), 0);

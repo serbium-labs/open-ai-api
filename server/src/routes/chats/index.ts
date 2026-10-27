@@ -19,6 +19,7 @@ import {
   type NormalizedAudioUpload,
 } from "#services/audio-format";
 import type { AudioTranscriber } from "#services/audio-transcription";
+import type { AudioDurationReader } from "#services/audio-duration";
 import type {
   ChatCreateRequestBody,
   ChatDetailResponse,
@@ -51,6 +52,7 @@ function errorMessage(error: unknown): string {
 }
 
 type ProcessChatMessageOptions = {
+  audioDurationReader: AudioDurationReader;
   audioTranscriber: AudioTranscriber;
   chatArchiveService: ChatArchiveService;
   chatId: string;
@@ -60,6 +62,7 @@ type ProcessChatMessageOptions = {
 };
 
 export async function processChatMessage({
+  audioDurationReader,
   audioTranscriber,
   chatArchiveService,
   chatId,
@@ -71,6 +74,7 @@ export async function processChatMessage({
 
   let userContent = prompt;
   let normalizedAudio: NormalizedAudioUpload | undefined;
+  let durationSeconds: number | undefined;
 
   if (
     file !== undefined &&
@@ -80,6 +84,7 @@ export async function processChatMessage({
       file.path,
       file.originalname,
     );
+    durationSeconds = await audioDurationReader.readDurationSeconds(file.path);
     const transcript = await audioTranscriber.transcribe({
       path: file.path,
       sizeBytes: file.size,
@@ -109,6 +114,7 @@ export async function processChatMessage({
           normalizedAudio?.originalName ?? file.originalname,
         mimeType: normalizedAudio?.mimeType ?? file.mimetype,
         temporaryPath: file.path,
+        durationSeconds,
       };
   const chatAfterUserMessage =
     await chatArchiveService.appendMessage(
@@ -174,6 +180,7 @@ export function createChatsRouter(
   codexService: CodexService,
   chatArchiveService: ChatArchiveService,
   audioTranscriber: AudioTranscriber,
+  audioDurationReader: AudioDurationReader,
 ): Router {
   const router: Router = Router();
   const pendingMessages = new Map<string, Promise<void>>();
@@ -401,6 +408,7 @@ export function createChatsRouter(
         const result = await inChatOrder(
           request.params.chatId,
           () => processChatMessage({
+            audioDurationReader,
             audioTranscriber,
             chatArchiveService,
             chatId: request.params.chatId,

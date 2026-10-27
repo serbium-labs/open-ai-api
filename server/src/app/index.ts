@@ -9,12 +9,17 @@ import {
 } from "#services/audio-transcription";
 import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
+import {
+  AudioDurationService,
+  type AudioDurationReader,
+} from "#services/audio-duration";
 
 export type AppDependencies = {
   config?: ServerConfig;
   codexService?: CodexService;
   chatArchiveService?: ChatArchiveService;
   audioTranscriber?: AudioTranscriber;
+  audioDurationReader?: AudioDurationReader;
 };
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -30,6 +35,11 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     dependencies.audioTranscriber ?? new AudioTranscriptionService({
       ...config.audioTranscription,
     });
+  const audioDurationReader: AudioDurationReader =
+    dependencies.audioDurationReader ?? new AudioDurationService({
+      ffmpegExecutable: config.audioTranscription.ffmpegExecutable,
+      timeoutMs: config.audioTranscription.timeoutMs,
+    });
   const app: Express = express();
 
   app.use(express.json());
@@ -39,6 +49,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
       codexService,
       chatArchiveService,
       audioTranscriber,
+      audioDurationReader,
     ),
   );
 
