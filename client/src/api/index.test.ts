@@ -1,7 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deleteChat } from "@api";
+import { deleteChat, fetchChats } from "@api";
+
+test("fetchChats returns an empty list for an empty successful response", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response("", { status: 200 });
+
+  assert.deepEqual(await fetchChats(fetchImpl), []);
+});
+
+test("fetchChats returns an empty list for invalid JSON", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response("{", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  assert.deepEqual(await fetchChats(fetchImpl), []);
+});
+
+test("fetchChats returns an empty list when the response shape is invalid", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response("{}", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  assert.deepEqual(await fetchChats(fetchImpl), []);
+});
+
+test("fetchChats reports a controlled error for an empty error response", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response("", { status: 502 });
+
+  await assert.rejects(
+    fetchChats(fetchImpl),
+    /Request failed with status 502/,
+  );
+});
 
 test("deleteChat sends a DELETE request for the encoded chat ID", async () => {
   let requestedUrl: string | URL | Request | undefined;

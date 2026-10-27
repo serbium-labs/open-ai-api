@@ -4,10 +4,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { createChatsRouter, processChatMessage } from "./index";
+import {
+  createChatsRouter,
+  getAttachmentMimeType,
+  processChatMessage,
+} from "./index";
 import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
 import type { AudioTranscriber } from "#services/audio-transcription";
+import type { AudioDurationReader } from "#services/audio-duration";
+
+const durationReader: AudioDurationReader = {
+  async readDurationSeconds(): Promise<number> {
+    return 4.25;
+  },
+};
+
+test("attachment audio MIME types are explicit and case-insensitive", () => {
+  assert.equal(getAttachmentMimeType("voice.webm"), "audio/webm");
+  assert.equal(getAttachmentMimeType("voice.OGG"), "audio/ogg");
+  assert.equal(getAttachmentMimeType("voice.mp4"), "audio/mp4");
+  assert.equal(getAttachmentMimeType("voice.m4a"), "audio/mp4");
+  assert.equal(getAttachmentMimeType("voice.wav"), "audio/wav");
+  assert.equal(getAttachmentMimeType("notes.txt"), undefined);
+});
 
 type FakeCodex = {
   prompts: string[];
@@ -54,6 +74,7 @@ test("voice uploads are transcribed before Codex and archived with byte-accurate
 
   try {
     const result = await processChatMessage({
+      audioDurationReader: durationReader,
       audioTranscriber: transcriber,
       chatArchiveService: archive,
       chatId: chat.id,
@@ -78,9 +99,17 @@ test("voice uploads are transcribed before Codex and archived with byte-accurate
     );
     assert.deepEqual(
       result.chat.messages[0]?.attachments.map(
-        ({ name, mimeType }) => ({ name, mimeType }),
+        ({ name, mimeType, durationSeconds }) => ({
+          name,
+          mimeType,
+          durationSeconds,
+        }),
       ),
-      [{ name: "voice-message.ogg", mimeType: "audio/ogg" }],
+      [{
+        name: "voice-message.ogg",
+        mimeType: "audio/ogg",
+        durationSeconds: 4.25,
+      }],
     );
     assert.match(
       result.chat.messages[0]?.attachments[0]?.path ?? "",
@@ -115,6 +144,7 @@ test("a transcription failure is returned clearly and is not sent to Codex", asy
   try {
     await assert.rejects(
       processChatMessage({
+        audioDurationReader: durationReader,
         audioTranscriber: transcriber,
         chatArchiveService: archive,
         chatId: chat.id,
@@ -159,6 +189,7 @@ test("ordinary file attachments bypass transcription and keep their existing Cod
 
   try {
     await processChatMessage({
+      audioDurationReader: durationReader,
       audioTranscriber: transcriber,
       chatArchiveService: archive,
       chatId: chat.id,
@@ -207,6 +238,8 @@ async function invokeDeleteRoute(
   const router = createChatsRouter(
     new CodexService({ workingDirectory, model: "test-model" }),
     chatArchiveService,
+    { async transcribe() { return ""; } },
+    durationReader,
   ) as unknown as { stack: RouteLayer[] };
   const deleteLayer: RouteLayer | undefined = router.stack.find(
     (layer: RouteLayer) => layer.route?.path === "/:chatId" && layer.route.methods.delete,

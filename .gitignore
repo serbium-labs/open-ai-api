@@ -1,4 +1,7 @@
 .DS_Store
+.env
+.env.*
+!.env.example
 node_modules
 dist/
 build/
@@ -7,6 +10,7 @@ openspec
 .agents
 /chats/
 /models/
+/.local/
 .dev-server-pids.json
 code-to-edit/
 responses/

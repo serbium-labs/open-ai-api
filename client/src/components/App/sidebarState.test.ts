@@ -13,11 +13,12 @@ import {
   type SidebarState,
 } from "./sidebarState";
 
-test("uses the same 640px mobile breakpoint as the stylesheet", () => {
+test("uses the same collision-free sidebar breakpoint as the stylesheet", () => {
   const stylesheet: string = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
 
-  assert.equal(MOBILE_MEDIA_QUERY, "(max-width: 640px)");
-  assert.match(stylesheet, /@media \(max-width: 640px\)/);
+  assert.equal(MOBILE_MEDIA_QUERY, "(max-width: 848px)");
+  assert.match(stylesheet, /@media \(max-width: 848px\)/);
+  assert.match(stylesheet, /--sidebar-width: min\(calc\(100vw - 104px\), 360px\)/);
 });
 
 test("desktop allows both user-selected sidebars to be open", () => {

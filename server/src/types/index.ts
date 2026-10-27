@@ -11,6 +11,7 @@ export type ChatAttachment = {
   name: string;
   mimeType: string;
   path: string;
+  durationSeconds?: number;
 };
 
 export type ChatResource = CodeFile & {

@@ -39,6 +39,7 @@ type IncomingAttachment = {
   originalName: string;
   mimeType: string;
   temporaryPath: string;
+  durationSeconds?: number;
 };
 
 const FRONTMATTER_DELIMITER = "---";
@@ -341,6 +342,11 @@ function parseAttachments(
         name: attachment.name,
         mimeType: attachment.mimeType,
         path: attachment.path,
+        ...(typeof attachment.durationSeconds === "number" &&
+        Number.isFinite(attachment.durationSeconds) &&
+        attachment.durationSeconds > 0
+          ? { durationSeconds: attachment.durationSeconds }
+          : {}),
       });
     } catch {
       continue;
@@ -620,6 +626,9 @@ public async getAttachmentPath(
         name: attachment.originalName,
         mimeType: attachment.mimeType,
         path: storedFileName,
+        ...(attachment.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: attachment.durationSeconds }),
       });
     }
 

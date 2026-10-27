@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
 
 import { CopyButton } from "@components/CopyButton";
 
@@ -74,6 +81,27 @@ export type ChatTranscriptProps = {
 
 const FENCE_PATTERN: RegExp = /```([^\r\n`]*)\r?\n([\s\S]*?)\r?\n```/g;
 const RESOURCE_HIGHLIGHT_DURATION_MS: number = 2_000;
+export const SMALL_IMAGE_MAX_DIMENSION_PX: number = 96;
+
+export type ResourceLoadStatus = "loading" | "loaded" | "error";
+
+export function getResourceLoadStatus(
+  event: "load" | "error",
+): ResourceLoadStatus {
+  return event === "load" ? "loaded" : "error";
+}
+
+type ImageDimensions = {
+  width: number;
+  height: number;
+};
+
+export function isSmallImage({ width, height }: ImageDimensions): boolean {
+  return (
+    width <= SMALL_IMAGE_MAX_DIMENSION_PX &&
+    height <= SMALL_IMAGE_MAX_DIMENSION_PX
+  );
+}
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -542,6 +570,96 @@ function attachmentIcon(attachment: ChatAttachment): string {
   return "📄";
 }
 
+function FileAttachment({
+  attachment,
+  url,
+}: {
+  attachment: ChatMessageAttachment;
+  url?: string;
+}): ReactElement {
+  const content: ReactNode = (
+    <>
+      <span className="message-attachment-icon" aria-hidden="true">
+        {attachmentIcon(attachment)}
+      </span>
+      <span className="message-attachment-name">{attachment.name}</span>
+    </>
+  );
+
+  return url === undefined ? (
+    <div className="message-attachment-file">{content}</div>
+  ) : (
+    <a
+      className="message-attachment-file"
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {content}
+    </a>
+  );
+}
+
+function ImageAttachment({
+  attachment,
+  url,
+}: {
+  attachment: ChatMessageAttachment;
+  url: string;
+}): ReactElement {
+  const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
+  const [loadStatus, setLoadStatus] =
+    useState<ResourceLoadStatus>("loading");
+
+  function handleLoad(event: SyntheticEvent<HTMLImageElement>): void {
+    const image: HTMLImageElement = event.currentTarget;
+    setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+    setLoadStatus(getResourceLoadStatus("load"));
+  }
+
+  if (loadStatus === "error") {
+    return <FileAttachment attachment={attachment} url={url} />;
+  }
+
+  if (dimensions !== null && isSmallImage(dimensions)) {
+    return <FileAttachment attachment={attachment} url={url} />;
+  }
+
+  return (
+    <div className="message-attachment-image-container">
+      <a
+        className={`message-attachment-image-link message-resource-${loadStatus}`}
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {loadStatus === "loading" ? (
+          <span
+            className="message-resource-skeleton message-image-skeleton"
+            role="status"
+            aria-label={`Loading ${attachment.name}`}
+          />
+        ) : null}
+        <img
+          className="message-attachment-image"
+          src={url}
+          alt={attachment.name}
+          loading="lazy"
+          onLoad={handleLoad}
+          onError={() => setLoadStatus(getResourceLoadStatus("error"))}
+          width={dimensions?.width}
+          height={dimensions?.height}
+        />
+      </a>
+      <span className="message-attachment-caption">{attachment.name}</span>
+    </div>
+  );
+}
+
+export function isSystemVoiceFilename(name: string): boolean {
+  return /^voice-message-\d+\.(?:m4a|ogg|webm)$/i.test(name);
+}
+
 function renderAttachment(
   attachment: ChatMessageAttachment,
   chatId: string | undefined,
@@ -566,32 +684,23 @@ function renderAttachment(
         ) : (
           <AudioPlayer
             src={audioUrl}
+            mimeType={attachment.mimeType}
             label={attachment.name}
+            durationSeconds={attachment.durationSeconds}
           />
         )}
 
-        <span className="message-attachment-name">
-          {attachment.name}
-        </span>
+        {!isSystemVoiceFilename(attachment.name) ? (
+          <span className="message-attachment-name">
+            {attachment.name}
+          </span>
+        ) : null}
       </div>
     );
   }
 
   if (chatId === undefined && attachment.previewUrl === undefined) {
-    return (
-      <div className="message-attachment-file" key={key}>
-        <span
-          className="message-attachment-icon"
-          aria-hidden="true"
-        >
-          {attachmentIcon(attachment)}
-        </span>
-
-        <span className="message-attachment-name">
-          {attachment.name}
-        </span>
-      </div>
-    );
+    return <FileAttachment attachment={attachment} key={key} />;
   }
 
   const url: string =
@@ -599,48 +708,22 @@ function renderAttachment(
     attachmentUrl(chatId as string, attachment.path);
 
   if (attachment.mimeType.startsWith("image/")) {
-    return (
-      <div className="message-attachment-image-container" key={key}>
-        <a
-          className="message-attachment-image-link"
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <img
-            className="message-attachment-image"
-            src={url}
-            alt={attachment.name}
-            loading="lazy"
-          />
-        </a>
-        <span className="message-attachment-caption">
-          {attachment.name}
-        </span>
-      </div>
-    );
+    return <ImageAttachment attachment={attachment} url={url} key={key} />;
   }
 
-  return (
-    <a
-      className="message-attachment-file"
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      key={key}
-    >
-      <span
-        className="message-attachment-icon"
-        aria-hidden="true"
-      >
-        {attachmentIcon(attachment)}
-      </span>
+  return <FileAttachment attachment={attachment} url={url} key={key} />;
+}
 
-      <span className="message-attachment-name">
-        {attachment.name}
-      </span>
-    </a>
-  );
+function attachmentRenderKey(
+  messageId: string,
+  attachment: ChatMessageAttachment,
+  chatId: string | undefined,
+  index: number,
+): string {
+  const resourceIdentity: string =
+    attachment.previewUrl ?? `${chatId ?? "local"}/${attachment.path}`;
+
+  return `${messageId}-attachment-${index}-${resourceIdentity}`;
 }
 
 function ThinkingIndicator(): ReactElement {
@@ -665,6 +748,29 @@ function ThinkingIndicator(): ReactElement {
 
   );
 
+}
+
+function ProcessingAudioIndicator(): ReactElement {
+  return (
+    <div className="thinking-indicator" role="status">
+      Processing audio...
+    </div>
+  );
+}
+
+function isPendingVoiceTurn(
+  messages: ChatMessage[],
+  messageIndex: number,
+): boolean {
+  const message: ChatMessage | undefined = messages[messageIndex];
+  const nextMessage: ChatMessage | undefined = messages[messageIndex + 1];
+
+  return (
+    message?.role === "user" &&
+    message.attachments.some(({ mimeType }) => mimeType.startsWith("audio/")) &&
+    nextMessage?.role === "assistant" &&
+    nextMessage.status === "pending"
+  );
 }
 
 function EmptyChatArt(): ReactElement {
@@ -788,7 +894,18 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
       {messages.length === 0 ? <EmptyChatArt /> : null}
 
-      {messages.map((message: ChatMessage) => (
+      {messages.map((message: ChatMessage, messageIndex: number) => {
+        const isVoiceProcessing: boolean = isPendingVoiceTurn(
+          messages,
+          messageIndex,
+        );
+        const followsProcessingVoice: boolean =
+          message.role === "assistant" &&
+          message.status === "pending" &&
+          messageIndex > 0 &&
+          isPendingVoiceTurn(messages, messageIndex - 1);
+
+        return (
 
         <article
           className={`chat-message chat-message-${message.role} chat-message-${message.status}${
@@ -805,7 +922,7 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
           }}
         >
 
-          <div className="message-content">
+          {followsProcessingVoice ? null : <div className="message-content">
 
             {message.attachments.length > 0 ? (
               <div className="message-attachments">
@@ -814,11 +931,18 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
                     renderAttachment(
                       attachment,
                       chatId,
-                      `${message.id}-attachment-${index}`,
+                      attachmentRenderKey(
+                        message.id,
+                        attachment,
+                        chatId,
+                        index,
+                      ),
                     ),
                 )}
               </div>
             ) : null}
+
+            {isVoiceProcessing ? <ProcessingAudioIndicator /> : null}
 
             {message.status === "pending" ? (
 
@@ -830,11 +954,12 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
             ) : null}
 
-          </div>
+          </div>}
 
         </article>
 
-      ))}
+        );
+      })}
       <div className="chat-scroll-anchor" aria-hidden="true" />
     </section>
 

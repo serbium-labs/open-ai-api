@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.155.0",
+    "dotenv": "^16.4.7",
     "express": "^4.19.2",
     "multer": "^2.4.0"
   },
