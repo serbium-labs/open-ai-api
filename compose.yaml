@@ -35,7 +35,9 @@ services:
         source: codex_home
         target: /home/node/.codex
       - type: bind
-        source: ${CODEX_AUTH_DIR:-${HOME}/.codex}
+        # HOME is commonly unset in Windows PowerShell. Fall back to
+        # USERPROFILE there so the host Codex login is mounted correctly.
+        source: ${CODEX_AUTH_DIR:-${HOME:-${USERPROFILE}}/.codex}
         target: /codex-auth
         read_only: true
 

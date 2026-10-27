@@ -146,7 +146,7 @@ Review every value before starting the application:
 | `FFMPEG_PATH` | No | `ffmpeg` | FFmpeg command name or executable path. Relative paths containing directory separators are resolved from the repository root. |
 | `WHISPER_CPP_PATH` | No | auto-detected | `whisper-cli` command or executable path. Leave it unset when using the provided setup script. |
 | `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | `120000` | Positive transcription timeout in milliseconds. Invalid or non-positive values fall back to the default. |
-| `CODEX_AUTH_DIR` | Docker only | `${HOME}/.codex` | Host directory from which `auth.json` and `config.toml` are imported into the writable container `CODEX_HOME`. This is consumed by Compose rather than the server. |
+| `CODEX_AUTH_DIR` | Docker only | `${HOME}/.codex` on macOS/Linux; `${USERPROFILE}/.codex` when `HOME` is unset on Windows | Host directory from which `auth.json` and `config.toml` are imported into the writable container `CODEX_HOME`. This is consumed by Compose rather than the server. |
 
 Important configuration rules:
 
