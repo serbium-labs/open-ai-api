@@ -113,6 +113,7 @@ export function AudioPlayer({
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
   const durationProbeRef = useRef<AudioDurationProbe | null>(null);
+  const durationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -135,16 +136,28 @@ export function AudioPlayer({
     // defer the duration/seekable calculation until the first play().
     audio?.load();
 
+    if (audio !== null && !updateDuration()) {
+      durationPollRef.current = setInterval(updateDuration, 100);
+    }
+
     return () => {
+      stopDurationPolling();
       audio?.pause();
     };
   }, [src]);
 
-  function updateDuration(): void {
+  function stopDurationPolling(): void {
+    if (durationPollRef.current !== null) {
+      clearInterval(durationPollRef.current);
+      durationPollRef.current = null;
+    }
+  }
+
+  function updateDuration(): boolean {
     const audio: HTMLAudioElement | null = audioRef.current;
 
     if (audio === null) {
-      return;
+      return false;
     }
 
     if (
@@ -157,6 +170,7 @@ export function AudioPlayer({
     const nextDuration: number | undefined = getAudioDuration(audio);
 
     if (nextDuration !== undefined) {
+      stopDurationPolling();
       setDuration(nextDuration);
 
       const restoreTime: number | undefined =
@@ -165,20 +179,30 @@ export function AudioPlayer({
       durationProbeRef.current = null;
 
       if (restoreTime !== undefined) {
-        audio.currentTime = restoreTime;
+        try {
+          audio.currentTime = restoreTime;
+        } catch {
+          // The source may have changed while the duration probe was running.
+        }
       }
-    } else if (
-      audio.duration === Number.POSITIVE_INFINITY &&
-      durationProbeRef.current === null
-    ) {
-      // MediaRecorder WebM blobs can omit duration metadata. Seeking forces
-      // browsers to discover the actual end and emit another duration update.
-      durationProbeRef.current = {
-        src,
-        startTime: audio.currentTime,
-      };
-      audio.currentTime = Number.MAX_SAFE_INTEGER;
+
+      return true;
     }
+
+    if (durationProbeRef.current === null) {
+      durationProbeRef.current = { src, startTime: audio.currentTime };
+    }
+
+    try {
+      // MediaRecorder WebM blobs can omit duration metadata. Repeating the
+      // end seek also covers Chromium reporting NaN/0 before it reports
+      // Infinity or makes the seekable range available.
+      audio.currentTime = Number.MAX_SAFE_INTEGER;
+    } catch {
+      // Seeking can fail before metadata exists; polling retries it shortly.
+    }
+
+    return false;
   }
 
   function updateCurrentTime(): void {
@@ -194,10 +218,15 @@ export function AudioPlayer({
     const restoreTime: number | undefined =
       getDurationProbeRestoreTime(durationProbeRef.current, src);
 
+    stopDurationPolling();
     durationProbeRef.current = null;
 
     if (audio !== null && restoreTime !== undefined) {
-      audio.currentTime = restoreTime;
+      try {
+        audio.currentTime = restoreTime;
+      } catch {
+        // The source may have changed while the duration probe was running.
+      }
     }
   }
 
@@ -307,6 +336,8 @@ export function AudioPlayer({
           setCurrentTime(0);
         }}
         onError={() => {
+          stopDurationPolling();
+          durationProbeRef.current = null;
           setIsPlaying(false);
           setPlaybackError("Audio could not be loaded.");
           setLoadStatus("error");
