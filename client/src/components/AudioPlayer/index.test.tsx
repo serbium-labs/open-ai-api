@@ -7,6 +7,7 @@ import {
   formatAudioDuration,
   formatAudioTime,
   getAudioDuration,
+  getProvidedAudioDuration,
   getDurationProbeRestoreTime,
   getPlaybackProgress,
   getSeekTime,
@@ -62,6 +63,14 @@ test("getAudioDuration rejects non-finite and negative durations", () => {
     getAudioDuration({ duration: -1, seekable: emptyRanges }),
     undefined,
   );
+});
+
+test("getProvidedAudioDuration accepts only a positive server duration", () => {
+  assert.equal(getProvidedAudioDuration(4.25), 4.25);
+  assert.equal(getProvidedAudioDuration(0), undefined);
+  assert.equal(getProvidedAudioDuration(-1), undefined);
+  assert.equal(getProvidedAudioDuration(Number.NaN), undefined);
+  assert.equal(getProvidedAudioDuration(undefined), undefined);
 });
 
 test("getAudioDuration falls back from zero to a positive seekable end", () => {

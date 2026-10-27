@@ -68,6 +68,14 @@ export function getAudioDuration(
   return undefined;
 }
 
+export function getProvidedAudioDuration(
+  durationSeconds: number | undefined,
+): number | undefined {
+  return Number.isFinite(durationSeconds) && (durationSeconds ?? 0) > 0
+    ? durationSeconds
+    : undefined;
+}
+
 export function getDurationProbeRestoreTime(
   probe: AudioDurationProbe | null,
   src: string,
@@ -118,33 +126,32 @@ export function AudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const durationProbeRef = useRef<AudioDurationProbe | null>(null);
   const durationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const initialDuration =
-    Number.isFinite(durationSeconds) && (durationSeconds ?? 0) > 0
-      ? durationSeconds as number
-      : 0;
-  const [duration, setDuration] = useState<number>(initialDuration);
+  const providedDuration: number | undefined =
+    getProvidedAudioDuration(durationSeconds);
+  const [detectedDuration, setDetectedDuration] = useState<number>(0);
+  const duration: number = providedDuration ?? detectedDuration;
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackError, setPlaybackError] = useState<string>("");
   const [loadStatus, setLoadStatus] =
-    useState<ResourceLoadStatus>(initialDuration > 0 ? "loaded" : "loading");
+    useState<ResourceLoadStatus>(providedDuration !== undefined ? "loaded" : "loading");
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
 
     durationProbeRef.current = null;
-    setDuration(initialDuration);
+    setDetectedDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
-    setLoadStatus(initialDuration > 0 ? "loaded" : "loading");
+    setLoadStatus(providedDuration !== undefined ? "loaded" : "loading");
 
     // Explicitly start metadata loading for a newly-created blob URL. Some
     // Chromium builds (notably through Docker Desktop on Windows) otherwise
     // defer the duration/seekable calculation until the first play().
     audio?.load();
 
-    if (initialDuration <= 0 && audio !== null && !updateDuration()) {
+    if (providedDuration === undefined && audio !== null && !updateDuration()) {
       durationPollRef.current = setInterval(updateDuration, 100);
     }
 
@@ -152,7 +159,7 @@ export function AudioPlayer({
       stopDurationPolling();
       audio?.pause();
     };
-  }, [src, mimeType, initialDuration]);
+  }, [src, mimeType, providedDuration]);
 
   function stopDurationPolling(): void {
     if (durationPollRef.current !== null) {
@@ -168,6 +175,16 @@ export function AudioPlayer({
       return false;
     }
 
+    // A duration measured on the server is authoritative. In particular,
+    // Firefox can keep duration/seekable unresolved for a blob-backed WebM
+    // until playback starts; probing must not replace or delay the supplied
+    // value in the UI.
+    if (providedDuration !== undefined) {
+      stopDurationPolling();
+      durationProbeRef.current = null;
+      return true;
+    }
+
     if (
       durationProbeRef.current !== null &&
       durationProbeRef.current.src !== src
@@ -179,7 +196,7 @@ export function AudioPlayer({
 
     if (nextDuration !== undefined) {
       stopDurationPolling();
-      setDuration(nextDuration);
+      setDetectedDuration(nextDuration);
 
       const restoreTime: number | undefined =
         getDurationProbeRestoreTime(durationProbeRef.current, src);
