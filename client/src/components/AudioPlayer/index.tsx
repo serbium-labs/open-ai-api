@@ -19,11 +19,6 @@ export type AudioPlayerProps = {
   waveform?: number[];
 };
 
-export type AudioDurationProbe = {
-  src: string;
-  startTime: number;
-};
-
 const DEFAULT_WAVEFORM: number[] = [
   0.32, 0.48, 0.72, 0.45, 0.88, 0.61, 0.38, 0.76,
   0.54, 0.92, 0.68, 0.42, 0.58, 0.81, 0.47, 0.7,
@@ -76,11 +71,12 @@ export function getProvidedAudioDuration(
     : undefined;
 }
 
-export function getDurationProbeRestoreTime(
-  probe: AudioDurationProbe | null,
-  src: string,
+export function getDecodedAudioDuration(
+  audioBuffer: Pick<AudioBuffer, "duration">,
 ): number | undefined {
-  return probe?.src === src ? probe.startTime : undefined;
+  return Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
+    ? audioBuffer.duration
+    : undefined;
 }
 
 export function getSeekTime(
@@ -124,8 +120,6 @@ export function AudioPlayer({
   waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const durationProbeRef = useRef<AudioDurationProbe | null>(null);
-  const durationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const providedDuration: number | undefined =
     getProvidedAudioDuration(durationSeconds);
   const [detectedDuration, setDetectedDuration] = useState<number>(0);
@@ -138,8 +132,8 @@ export function AudioPlayer({
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
+    const abortController = new AbortController();
 
-    durationProbeRef.current = null;
     setDetectedDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
@@ -151,22 +145,15 @@ export function AudioPlayer({
     // defer the duration/seekable calculation until the first play().
     audio?.load();
 
-    if (providedDuration === undefined && audio !== null && !updateDuration()) {
-      durationPollRef.current = setInterval(updateDuration, 100);
+    if (providedDuration === undefined && !updateDuration()) {
+      void detectDurationFromBytes(abortController.signal);
     }
 
     return () => {
-      stopDurationPolling();
+      abortController.abort();
       audio?.pause();
     };
   }, [src, mimeType, providedDuration]);
-
-  function stopDurationPolling(): void {
-    if (durationPollRef.current !== null) {
-      clearInterval(durationPollRef.current);
-      durationPollRef.current = null;
-    }
-  }
 
   function updateDuration(): boolean {
     const audio: HTMLAudioElement | null = audioRef.current;
@@ -180,79 +167,53 @@ export function AudioPlayer({
     // until playback starts; probing must not replace or delay the supplied
     // value in the UI.
     if (providedDuration !== undefined) {
-      stopDurationPolling();
-      durationProbeRef.current = null;
       return true;
-    }
-
-    if (
-      durationProbeRef.current !== null &&
-      durationProbeRef.current.src !== src
-    ) {
-      durationProbeRef.current = null;
     }
 
     const nextDuration: number | undefined = getAudioDuration(audio);
 
     if (nextDuration !== undefined) {
-      stopDurationPolling();
       setDetectedDuration(nextDuration);
-
-      const restoreTime: number | undefined =
-        getDurationProbeRestoreTime(durationProbeRef.current, src);
-
-      durationProbeRef.current = null;
-
-      if (restoreTime !== undefined) {
-        try {
-          audio.currentTime = restoreTime;
-        } catch {
-          // The source may have changed while the duration probe was running.
-        }
-      }
-
       return true;
-    }
-
-    if (durationProbeRef.current === null) {
-      durationProbeRef.current = { src, startTime: audio.currentTime };
-    }
-
-    try {
-      // MediaRecorder WebM blobs can omit duration metadata. Repeating the
-      // end seek also covers Chromium reporting NaN/0 before it reports
-      // Infinity or makes the seekable range available.
-      audio.currentTime = Number.MAX_SAFE_INTEGER;
-    } catch {
-      // Seeking can fail before metadata exists; polling retries it shortly.
     }
 
     return false;
   }
 
-  function updateCurrentTime(): void {
-    updateDuration();
+  async function detectDurationFromBytes(signal: AbortSignal): Promise<void> {
+    try {
+      const response: Response = await fetch(src, { signal });
 
-    if (durationProbeRef.current === null) {
-      setCurrentTime(audioRef.current?.currentTime ?? 0);
+      if (!response.ok) {
+        return;
+      }
+
+      const bytes: ArrayBuffer = await response.arrayBuffer();
+
+      if (signal.aborted) {
+        return;
+      }
+
+      // An offline context can decode without entering the browser's audible
+      // autoplay lifecycle and does not consume one of its playback contexts.
+      const audioContext = new OfflineAudioContext(1, 1, 44_100);
+      const decodedAudio: AudioBuffer =
+        await audioContext.decodeAudioData(bytes);
+      const decodedDuration: number | undefined =
+        getDecodedAudioDuration(decodedAudio);
+
+      if (!signal.aborted && decodedDuration !== undefined) {
+        setDetectedDuration(decodedDuration);
+      }
+    } catch {
+      // Native media events may still resolve duration during playback. A
+      // decode failure must not make otherwise playable audio unavailable.
     }
   }
 
-  function cancelDurationProbe(): void {
-    const audio: HTMLAudioElement | null = audioRef.current;
-    const restoreTime: number | undefined =
-      getDurationProbeRestoreTime(durationProbeRef.current, src);
-
-    stopDurationPolling();
-    durationProbeRef.current = null;
-
-    if (audio !== null && restoreTime !== undefined) {
-      try {
-        audio.currentTime = restoreTime;
-      } catch {
-        // The source may have changed while the duration probe was running.
-      }
-    }
+  function updateCurrentTime(): void {
+    updateDuration();
+    setCurrentTime(audioRef.current?.currentTime ?? 0);
   }
 
   async function togglePlayback(): Promise<void> {
@@ -261,8 +222,6 @@ export function AudioPlayer({
     if (audio === null) {
       return;
     }
-
-    cancelDurationProbe();
 
     if (!audio.paused) {
       audio.pause();
@@ -284,8 +243,6 @@ export function AudioPlayer({
     if (audio === null || duration <= 0) {
       return;
     }
-
-    cancelDurationProbe();
 
     const boundedTime: number = Math.min(duration, Math.max(0, nextTime));
     audio.currentTime = boundedTime;
@@ -360,8 +317,6 @@ export function AudioPlayer({
           setCurrentTime(0);
         }}
         onError={() => {
-          stopDurationPolling();
-          durationProbeRef.current = null;
           setIsPlaying(false);
           setPlaybackError("Audio could not be loaded.");
           setLoadStatus("error");

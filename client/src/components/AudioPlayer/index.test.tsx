@@ -4,11 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   AudioPlayer,
+  getDecodedAudioDuration,
   formatAudioDuration,
   formatAudioTime,
   getAudioDuration,
   getProvidedAudioDuration,
-  getDurationProbeRestoreTime,
   getPlaybackProgress,
   getSeekTime,
   getVoicePlaybackLabel,
@@ -122,22 +122,11 @@ test("getAudioDuration recovers when metadata changes from zero to valid", () =>
   assert.equal(getAudioDuration(media), 12.4);
 });
 
-test("duration probes only restore playback for their original source", () => {
-  const probe = {
-    src: "blob:first-recording",
-    startTime: 3.5,
-  };
-
+test("getDecodedAudioDuration accepts only positive decoded durations", () => {
+  assert.equal(getDecodedAudioDuration({ duration: 3.5 }), 3.5);
+  assert.equal(getDecodedAudioDuration({ duration: 0 }), undefined);
   assert.equal(
-    getDurationProbeRestoreTime(probe, "blob:first-recording"),
-    3.5,
-  );
-  assert.equal(
-    getDurationProbeRestoreTime(probe, "blob:second-recording"),
-    undefined,
-  );
-  assert.equal(
-    getDurationProbeRestoreTime(null, "blob:first-recording"),
+    getDecodedAudioDuration({ duration: Number.POSITIVE_INFINITY }),
     undefined,
   );
 });
