@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 
 import multer from "multer";
 import {
@@ -19,6 +19,7 @@ import {
   type NormalizedAudioUpload,
 } from "#services/audio-format";
 import type { AudioTranscriber } from "#services/audio-transcription";
+import type { AudioDurationReader } from "#services/audio-duration";
 import type {
   ChatCreateRequestBody,
   ChatDetailResponse,
@@ -50,7 +51,21 @@ function errorMessage(error: unknown): string {
     : "Unexpected server error";
 }
 
+const ATTACHMENT_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".m4a": "audio/mp4",
+  ".mp4": "audio/mp4",
+  ".oga": "audio/ogg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".webm": "audio/webm",
+};
+
+export function getAttachmentMimeType(path: string): string | undefined {
+  return ATTACHMENT_MIME_TYPES[extname(path).toLowerCase()];
+}
+
 type ProcessChatMessageOptions = {
+  audioDurationReader: AudioDurationReader;
   audioTranscriber: AudioTranscriber;
   chatArchiveService: ChatArchiveService;
   chatId: string;
@@ -60,6 +75,7 @@ type ProcessChatMessageOptions = {
 };
 
 export async function processChatMessage({
+  audioDurationReader,
   audioTranscriber,
   chatArchiveService,
   chatId,
@@ -71,6 +87,7 @@ export async function processChatMessage({
 
   let userContent = prompt;
   let normalizedAudio: NormalizedAudioUpload | undefined;
+  let durationSeconds: number | undefined;
 
   if (
     file !== undefined &&
@@ -80,6 +97,7 @@ export async function processChatMessage({
       file.path,
       file.originalname,
     );
+    durationSeconds = await audioDurationReader.readDurationSeconds(file.path);
     const transcript = await audioTranscriber.transcribe({
       path: file.path,
       sizeBytes: file.size,
@@ -109,6 +127,7 @@ export async function processChatMessage({
           normalizedAudio?.originalName ?? file.originalname,
         mimeType: normalizedAudio?.mimeType ?? file.mimetype,
         temporaryPath: file.path,
+        durationSeconds,
       };
   const chatAfterUserMessage =
     await chatArchiveService.appendMessage(
@@ -174,6 +193,7 @@ export function createChatsRouter(
   codexService: CodexService,
   chatArchiveService: ChatArchiveService,
   audioTranscriber: AudioTranscriber,
+  audioDurationReader: AudioDurationReader,
 ): Router {
   const router: Router = Router();
   const pendingMessages = new Map<string, Promise<void>>();
@@ -266,6 +286,13 @@ export function createChatsRouter(
             request.params.chatId,
             request.params.attachmentName,
           );
+
+        const mimeType: string | undefined =
+          getAttachmentMimeType(attachmentPath);
+
+        if (mimeType !== undefined) {
+          response.type(mimeType);
+        }
 
         response.sendFile(attachmentPath);
       } catch (error: unknown) {
@@ -401,6 +428,7 @@ export function createChatsRouter(
         const result = await inChatOrder(
           request.params.chatId,
           () => processChatMessage({
+            audioDurationReader,
             audioTranscriber,
             chatArchiveService,
             chatId: request.params.chatId,

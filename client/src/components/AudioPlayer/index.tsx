@@ -13,13 +13,10 @@ type ResourceLoadStatus = "loading" | "loaded" | "error";
 
 export type AudioPlayerProps = {
   src: string;
+  mimeType: string;
   label: string;
+  durationSeconds?: number;
   waveform?: number[];
-};
-
-export type AudioDurationProbe = {
-  src: string;
-  startTime: number;
 };
 
 const DEFAULT_WAVEFORM: number[] = [
@@ -38,6 +35,12 @@ export function formatAudioTime(seconds: number): string {
   const remainder: number = wholeSeconds % 60;
 
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
+export function formatAudioDuration(seconds: number): string {
+  return Number.isFinite(seconds) && seconds > 0
+    ? formatAudioTime(seconds)
+    : "--:--";
 }
 
 export function getAudioDuration(
@@ -60,11 +63,20 @@ export function getAudioDuration(
   return undefined;
 }
 
-export function getDurationProbeRestoreTime(
-  probe: AudioDurationProbe | null,
-  src: string,
+export function getProvidedAudioDuration(
+  durationSeconds: number | undefined,
 ): number | undefined {
-  return probe?.src === src ? probe.startTime : undefined;
+  return Number.isFinite(durationSeconds) && (durationSeconds ?? 0) > 0
+    ? durationSeconds
+    : undefined;
+}
+
+export function getDecodedAudioDuration(
+  audioBuffer: Pick<AudioBuffer, "duration">,
+): number | undefined {
+  return Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
+    ? audioBuffer.duration
+    : undefined;
 }
 
 export function getSeekTime(
@@ -102,92 +114,106 @@ export function getVoicePlaybackLabel(isPlaying: boolean): string {
 
 export function AudioPlayer({
   src,
+  mimeType,
   label,
+  durationSeconds,
   waveform,
 }: AudioPlayerProps): ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const durationProbeRef = useRef<AudioDurationProbe | null>(null);
-  const [duration, setDuration] = useState<number>(0);
+  const providedDuration: number | undefined =
+    getProvidedAudioDuration(durationSeconds);
+  const [detectedDuration, setDetectedDuration] = useState<number>(0);
+  const duration: number = providedDuration ?? detectedDuration;
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackError, setPlaybackError] = useState<string>("");
   const [loadStatus, setLoadStatus] =
-    useState<ResourceLoadStatus>("loading");
+    useState<ResourceLoadStatus>(providedDuration !== undefined ? "loaded" : "loading");
 
   useEffect(() => {
     const audio: HTMLAudioElement | null = audioRef.current;
+    const abortController = new AbortController();
 
-    durationProbeRef.current = null;
-    setDuration(0);
+    setDetectedDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
     setPlaybackError("");
-    setLoadStatus("loading");
+    setLoadStatus(providedDuration !== undefined ? "loaded" : "loading");
+
+    // Explicitly start metadata loading for a newly-created blob URL. Some
+    // Chromium builds (notably through Docker Desktop on Windows) otherwise
+    // defer the duration/seekable calculation until the first play().
+    audio?.load();
+
+    if (providedDuration === undefined && !updateDuration()) {
+      void detectDurationFromBytes(abortController.signal);
+    }
 
     return () => {
+      abortController.abort();
       audio?.pause();
     };
-  }, [src]);
+  }, [src, mimeType, providedDuration]);
 
-  function updateDuration(): void {
+  function updateDuration(): boolean {
     const audio: HTMLAudioElement | null = audioRef.current;
 
     if (audio === null) {
-      return;
+      return false;
     }
 
-    if (
-      durationProbeRef.current !== null &&
-      durationProbeRef.current.src !== src
-    ) {
-      durationProbeRef.current = null;
+    // A duration measured on the server is authoritative. In particular,
+    // Firefox can keep duration/seekable unresolved for a blob-backed WebM
+    // until playback starts; probing must not replace or delay the supplied
+    // value in the UI.
+    if (providedDuration !== undefined) {
+      return true;
     }
 
     const nextDuration: number | undefined = getAudioDuration(audio);
 
     if (nextDuration !== undefined) {
-      setDuration(nextDuration);
+      setDetectedDuration(nextDuration);
+      return true;
+    }
 
-      const restoreTime: number | undefined =
-        getDurationProbeRestoreTime(durationProbeRef.current, src);
+    return false;
+  }
 
-      durationProbeRef.current = null;
+  async function detectDurationFromBytes(signal: AbortSignal): Promise<void> {
+    try {
+      const response: Response = await fetch(src, { signal });
 
-      if (restoreTime !== undefined) {
-        audio.currentTime = restoreTime;
+      if (!response.ok) {
+        return;
       }
-    } else if (
-      audio.duration === Number.POSITIVE_INFINITY &&
-      durationProbeRef.current === null
-    ) {
-      // MediaRecorder WebM blobs can omit duration metadata. Seeking forces
-      // browsers to discover the actual end and emit another duration update.
-      durationProbeRef.current = {
-        src,
-        startTime: audio.currentTime,
-      };
-      audio.currentTime = Number.MAX_SAFE_INTEGER;
+
+      const bytes: ArrayBuffer = await response.arrayBuffer();
+
+      if (signal.aborted) {
+        return;
+      }
+
+      // An offline context can decode without entering the browser's audible
+      // autoplay lifecycle and does not consume one of its playback contexts.
+      const audioContext = new OfflineAudioContext(1, 1, 44_100);
+      const decodedAudio: AudioBuffer =
+        await audioContext.decodeAudioData(bytes);
+      const decodedDuration: number | undefined =
+        getDecodedAudioDuration(decodedAudio);
+
+      if (!signal.aborted && decodedDuration !== undefined) {
+        setDetectedDuration(decodedDuration);
+      }
+    } catch {
+      // Native media events may still resolve duration during playback. A
+      // decode failure must not make otherwise playable audio unavailable.
     }
   }
 
   function updateCurrentTime(): void {
     updateDuration();
-
-    if (durationProbeRef.current === null) {
-      setCurrentTime(audioRef.current?.currentTime ?? 0);
-    }
-  }
-
-  function cancelDurationProbe(): void {
-    const audio: HTMLAudioElement | null = audioRef.current;
-    const restoreTime: number | undefined =
-      getDurationProbeRestoreTime(durationProbeRef.current, src);
-
-    durationProbeRef.current = null;
-
-    if (audio !== null && restoreTime !== undefined) {
-      audio.currentTime = restoreTime;
-    }
+    setCurrentTime(audioRef.current?.currentTime ?? 0);
   }
 
   async function togglePlayback(): Promise<void> {
@@ -196,8 +222,6 @@ export function AudioPlayer({
     if (audio === null) {
       return;
     }
-
-    cancelDurationProbe();
 
     if (!audio.paused) {
       audio.pause();
@@ -219,8 +243,6 @@ export function AudioPlayer({
     if (audio === null || duration <= 0) {
       return;
     }
-
-    cancelDurationProbe();
 
     const boundedTime: number = Math.min(duration, Math.max(0, nextTime));
     audio.currentTime = boundedTime;
@@ -273,7 +295,6 @@ export function AudioPlayer({
     <div className="audio-player">
       <audio
         ref={audioRef}
-        src={src}
         preload="metadata"
         onCanPlay={() => {
           setPlaybackError("");
@@ -286,6 +307,7 @@ export function AudioPlayer({
           setLoadStatus("loaded");
           updateDuration();
         }}
+        onLoadedData={updateDuration}
         onProgress={updateDuration}
         onTimeUpdate={updateCurrentTime}
         onPlay={() => setIsPlaying(true)}
@@ -299,7 +321,9 @@ export function AudioPlayer({
           setPlaybackError("Audio could not be loaded.");
           setLoadStatus("error");
         }}
-      />
+      >
+        <source src={src} type={mimeType} />
+      </audio>
 
       {isLoading ? (
         <span
@@ -335,7 +359,7 @@ export function AudioPlayer({
           aria-valuemin={0}
           aria-valuemax={duration}
           aria-valuenow={Math.min(currentTime, duration)}
-          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioTime(duration)}`}
+          aria-valuetext={`${formatAudioTime(currentTime)} of ${formatAudioDuration(duration)}`}
           aria-disabled={duration <= 0}
           aria-busy={duration <= 0 && playbackError === ""}
           onClick={seekFromWaveform}
@@ -368,7 +392,7 @@ export function AudioPlayer({
         </div>
 
         <span className="audio-time" aria-live="off">
-          {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
+          {formatAudioTime(currentTime)} / {formatAudioDuration(duration)}
         </span>
       </div>
 

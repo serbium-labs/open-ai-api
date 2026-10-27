@@ -684,7 +684,9 @@ function renderAttachment(
         ) : (
           <AudioPlayer
             src={audioUrl}
+            mimeType={attachment.mimeType}
             label={attachment.name}
+            durationSeconds={attachment.durationSeconds}
           />
         )}
 
@@ -746,6 +748,29 @@ function ThinkingIndicator(): ReactElement {
 
   );
 
+}
+
+function ProcessingAudioIndicator(): ReactElement {
+  return (
+    <div className="thinking-indicator" role="status">
+      Processing audio...
+    </div>
+  );
+}
+
+function isPendingVoiceTurn(
+  messages: ChatMessage[],
+  messageIndex: number,
+): boolean {
+  const message: ChatMessage | undefined = messages[messageIndex];
+  const nextMessage: ChatMessage | undefined = messages[messageIndex + 1];
+
+  return (
+    message?.role === "user" &&
+    message.attachments.some(({ mimeType }) => mimeType.startsWith("audio/")) &&
+    nextMessage?.role === "assistant" &&
+    nextMessage.status === "pending"
+  );
 }
 
 function EmptyChatArt(): ReactElement {
@@ -869,7 +894,18 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
       {messages.length === 0 ? <EmptyChatArt /> : null}
 
-      {messages.map((message: ChatMessage) => (
+      {messages.map((message: ChatMessage, messageIndex: number) => {
+        const isVoiceProcessing: boolean = isPendingVoiceTurn(
+          messages,
+          messageIndex,
+        );
+        const followsProcessingVoice: boolean =
+          message.role === "assistant" &&
+          message.status === "pending" &&
+          messageIndex > 0 &&
+          isPendingVoiceTurn(messages, messageIndex - 1);
+
+        return (
 
         <article
           className={`chat-message chat-message-${message.role} chat-message-${message.status}${
@@ -886,7 +922,7 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
           }}
         >
 
-          <div className="message-content">
+          {followsProcessingVoice ? null : <div className="message-content">
 
             {message.attachments.length > 0 ? (
               <div className="message-attachments">
@@ -906,6 +942,8 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
               </div>
             ) : null}
 
+            {isVoiceProcessing ? <ProcessingAudioIndicator /> : null}
+
             {message.status === "pending" ? (
 
               <ThinkingIndicator />
@@ -916,11 +954,12 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
             ) : null}
 
-          </div>
+          </div>}
 
         </article>
 
-      ))}
+        );
+      })}
       <div className="chat-scroll-anchor" aria-hidden="true" />
     </section>
 

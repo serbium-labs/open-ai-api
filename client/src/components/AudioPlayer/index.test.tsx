@@ -4,9 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   AudioPlayer,
+  getDecodedAudioDuration,
+  formatAudioDuration,
   formatAudioTime,
   getAudioDuration,
-  getDurationProbeRestoreTime,
+  getProvidedAudioDuration,
   getPlaybackProgress,
   getSeekTime,
   getVoicePlaybackLabel,
@@ -16,6 +18,15 @@ test("formatAudioTime formats finite durations", () => {
   assert.equal(formatAudioTime(0), "0:00");
   assert.equal(formatAudioTime(65.9), "1:05");
   assert.equal(formatAudioTime(Number.NaN), "0:00");
+});
+
+test("formatAudioDuration distinguishes unresolved duration from zero time", () => {
+  assert.equal(formatAudioDuration(0), "--:--");
+  assert.equal(formatAudioDuration(Number.NaN), "--:--");
+  assert.equal(formatAudioDuration(Number.POSITIVE_INFINITY), "--:--");
+  assert.equal(formatAudioDuration(Number.NEGATIVE_INFINITY), "--:--");
+  assert.equal(formatAudioDuration(-1), "--:--");
+  assert.equal(formatAudioDuration(12.4), "0:12");
 });
 
 test("getAudioDuration reads ordinary finite durations", () => {
@@ -52,6 +63,14 @@ test("getAudioDuration rejects non-finite and negative durations", () => {
     getAudioDuration({ duration: -1, seekable: emptyRanges }),
     undefined,
   );
+});
+
+test("getProvidedAudioDuration accepts only a positive server duration", () => {
+  assert.equal(getProvidedAudioDuration(4.25), 4.25);
+  assert.equal(getProvidedAudioDuration(0), undefined);
+  assert.equal(getProvidedAudioDuration(-1), undefined);
+  assert.equal(getProvidedAudioDuration(Number.NaN), undefined);
+  assert.equal(getProvidedAudioDuration(undefined), undefined);
 });
 
 test("getAudioDuration falls back from zero to a positive seekable end", () => {
@@ -103,35 +122,53 @@ test("getAudioDuration recovers when metadata changes from zero to valid", () =>
   assert.equal(getAudioDuration(media), 12.4);
 });
 
-test("duration probes only restore playback for their original source", () => {
-  const probe = {
-    src: "blob:first-recording",
-    startTime: 3.5,
-  };
-
+test("getDecodedAudioDuration accepts only positive decoded durations", () => {
+  assert.equal(getDecodedAudioDuration({ duration: 3.5 }), 3.5);
+  assert.equal(getDecodedAudioDuration({ duration: 0 }), undefined);
   assert.equal(
-    getDurationProbeRestoreTime(probe, "blob:first-recording"),
-    3.5,
-  );
-  assert.equal(
-    getDurationProbeRestoreTime(probe, "blob:second-recording"),
-    undefined,
-  );
-  assert.equal(
-    getDurationProbeRestoreTime(null, "blob:first-recording"),
+    getDecodedAudioDuration({ duration: Number.POSITIVE_INFINITY }),
     undefined,
   );
 });
 
 test("AudioPlayer renders a loader while metadata is pending", () => {
   const markup: string = renderToStaticMarkup(
-    <AudioPlayer src="/voice.webm" label="voice-message.webm" />,
+    <AudioPlayer
+      src="/voice.webm"
+      mimeType="audio/webm"
+      label="voice-message.webm"
+    />,
   );
 
   assert.match(markup, /message-audio-skeleton/);
   assert.match(markup, /aria-label="Loading voice-message\.webm"/);
+  assert.match(markup, /preload="metadata"/);
+  assert.match(
+    markup,
+    /<source src="\/voice\.webm" type="audio\/webm"\/?>/,
+  );
   assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
+  assert.match(markup, /0:00 \/ --:--/);
+  assert.doesNotMatch(markup, /0:00 \/ 0:00/);
+  assert.match(markup, /aria-disabled="true"/);
+});
+
+test("AudioPlayer immediately uses a server-provided duration", () => {
+  const markup: string = renderToStaticMarkup(
+    <AudioPlayer
+      src="/voice.webm"
+      mimeType="audio/webm"
+      label="voice-message.webm"
+      durationSeconds={4.25}
+    />,
+  );
+
+  assert.doesNotMatch(markup, /message-audio-skeleton/);
+  assert.match(markup, /0:00 \/ 0:04/);
+  assert.match(markup, /aria-valuemax="4.25"/);
+  assert.match(markup, /tabindex="0"/);
+  assert.match(markup, /aria-disabled="false"/);
 });
 
 test("getSeekTime maps and clamps waveform clicks to playback time", () => {
@@ -158,6 +195,7 @@ test("AudioPlayer reuses supplied waveform values", () => {
   const markup: string = renderToStaticMarkup(
     <AudioPlayer
       src="/recording.webm"
+      mimeType="audio/webm"
       label="recording.webm"
       waveform={[0.5, 1]}
     />,

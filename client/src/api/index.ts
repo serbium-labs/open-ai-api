@@ -2,22 +2,43 @@ import type {
   ChatDetailResponse,
   ChatListResponse,
   ChatPromptResponse,
-  ErrorResponse,
 } from "@api/types";
 
 import type { ChatDetail, ChatSummary } from "@models";
 
 async function readJsonResponse<TSuccess extends object>(
   response: Response,
+  fallback?: TSuccess,
 ): Promise<TSuccess> {
-  const body: TSuccess | ErrorResponse =
-    (await response.json()) as TSuccess | ErrorResponse;
+  const responseText: string = await response.text();
+  let body: unknown;
+
+  try {
+    body = responseText.trim() === ""
+      ? undefined
+      : JSON.parse(responseText);
+  } catch {
+    body = undefined;
+  }
 
   if (!response.ok) {
     const errorMessage: string =
-      "error" in body ? body.error : "Request failed";
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      typeof body.error === "string"
+        ? body.error
+        : `Request failed with status ${response.status}`;
 
     throw new Error(errorMessage);
+  }
+
+  if (body === undefined) {
+    if (fallback !== undefined) {
+      return fallback;
+    }
+
+    throw new Error("Server returned an empty or invalid JSON response");
   }
 
   return body as TSuccess;
@@ -29,9 +50,9 @@ export async function fetchChats(
   const response: Response = await fetchImpl("/api/chats");
 
   const body: ChatListResponse =
-    await readJsonResponse<ChatListResponse>(response);
+    await readJsonResponse<ChatListResponse>(response, { chats: [] });
 
-  return body.chats;
+  return Array.isArray(body.chats) ? body.chats : [];
 }
 
 export async function createChat(

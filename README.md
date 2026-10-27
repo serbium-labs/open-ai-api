@@ -1,482 +1,305 @@
-# Open AI API
+# Codex Web Client
 
-A small local web application for talking to a Codex agent from a browser.
-The app shows a GPT-style chat between the user and the model, renders
-Markdown and code blocks in the transcript, and persists chat history on disk.
+Codex Web Client is a local, browser-based interface for working with OpenAI Codex. It provides persistent conversations, file and image attachments, locally transcribed voice messages, syntax-highlighted code responses, and a resource panel for files generated in Codex replies.
 
-The project is split into:
+The application is intended for local development and experimentation. The server runs Codex against this repository with `workspace-write` sandbox permissions, while the application itself instructs Codex to return proposed files as fenced code blocks instead of applying changes directly. Conversation data and attachments remain in the local `chats/` directory; prompts and attachments sent to Codex are still processed according to the authentication method and OpenAI account policies in use.
 
-- `client/` - React + Vite + TypeScript frontend
-- `server/` - Express + TypeScript backend
-- `chats/` - local runtime chat archive, ignored by Git
+## Features
 
-## Overview
+- Create, resume, rename, and delete persistent chats.
+- Continue conversations through Codex thread IDs.
+- Send text prompts and one attachment per message.
+- Pass images directly to Codex and expose other uploaded files through a safe local path.
+- Record voice messages in the browser and transcribe them locally with FFmpeg and `whisper.cpp`.
+- Extract fenced code blocks from assistant responses and display them as navigable, syntax-highlighted resources.
+- Preserve messages, generated resources, and attachments as human-readable local files.
+- Run with Docker Compose or directly with Node.js.
 
-This app is designed for local Codex experiments:
+## Technology stack
 
-- the browser provides a chat-style prompt UI,
-- the server sends the prompt to a local Codex session,
-- Codex returns a final Markdown response,
-- each conversation is saved under `chats/`,
-- fenced code blocks from assistant messages are saved as resources for the
-  same chat,
-- opening a saved chat loads its transcript and resource sidebar.
+| Area | Technologies |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 6, Highlight.js, Lucide React |
+| Backend | Node.js 22, TypeScript, Express 4, Multer |
+| Codex integration | `@openai/codex-sdk` |
+| Audio processing | Browser MediaRecorder API, FFmpeg, `whisper.cpp`, GGML Whisper Base model |
+| Persistence | Local filesystem Markdown files and attachment files |
+| Testing | Node.js test runner with `tsx` |
+| Containerization | Docker, Docker Compose |
 
-The resources sidebar is hidden by default and can be opened from the chat UI.
-It shows generated code block files with language labels, syntax highlighting,
-and copy buttons. Code blocks in chat responses have the same rendering and
-copy support.
+## Architecture
 
-An OpenAI API key is not required for the default local setup. The SDK reuses
-the existing Codex authentication session on the machine running the server, so
-it works with the same ChatGPT account already signed in to Codex.
+The repository is an npm workspace with separate frontend and backend packages:
+
+```text
+.
+├── client/
+│   ├── src/api/             # Typed HTTP client for the backend
+│   ├── src/components/      # React UI and page-level orchestration
+│   ├── src/constants/       # UI text and client constants
+│   ├── src/types/           # Client domain types
+│   └── vite.config.ts       # Dev server, ports, aliases, and /api proxy
+├── server/
+│   └── src/
+│       ├── app/             # Express composition root
+│       ├── config/          # .env loading, validation, and path resolution
+│       ├── constants/       # Model, routes, defaults, and shared constants
+│       ├── routes/chats/    # Chat, message, attachment, and resource HTTP API
+│       ├── services/        # Codex, archive, audio, and workspace logic
+│       └── types/           # Server DTOs and domain types
+├── scripts/
+│   ├── dev.mjs              # Starts the client and server together
+│   ├── stop-dev.mjs         # Stops processes recorded by the dev launcher
+│   ├── setup-whisper.sh     # Builds pinned whisper.cpp on macOS/Linux
+│   └── setup-whisper.ps1    # Builds pinned whisper.cpp on Windows
+├── chats/                   # Runtime chat archive; created automatically
+├── models/                  # Local Whisper model files
+├── compose.yaml             # Local container configuration
+└── Dockerfile               # Node, FFmpeg, whisper.cpp, and model image
+```
+
+At runtime, the browser calls `/api/chats`. Vite proxies `/api` requests to the Express server during development. Express validates uploads and delegates work to focused services. The Codex service starts or resumes an SDK thread using the repository root as its working directory. The chat archive service writes metadata, messages, attachments, and extracted response resources beneath `chats/`.
+
+```text
+Browser / React
+      │
+      │  /api/chats
+      ▼
+Vite development server
+      │
+      │  proxy
+      ▼
+Express routes
+      ├── Codex SDK ──────► OpenAI Codex
+      ├── chat archive ───► chats/
+      └── audio service ──► FFmpeg ──► whisper.cpp ──► local transcript
+```
+
+Assistant responses are stored with their chat. Fenced code blocks are also extracted into the chat's `resources/` directory. Paths supplied in fence metadata are validated as relative paths, and symbolic links are not followed when workspace files are read.
 
 ## Prerequisites
 
-- Node.js 18 or later
-- Codex CLI authenticated with your ChatGPT account
-- `ffmpeg` for safe audio decoding and normalization
-- `whisper.cpp` plus a local GGML Whisper model for voice messages
+Choose one runtime:
 
-## Local voice transcription
+- Docker Desktop with Docker Compose. This is the simplest option because the image includes Node.js, FFmpeg, `whisper.cpp`, and the Whisper model.
+- Node.js 22 and npm for native development. Voice transcription additionally requires FFmpeg, CMake, a C/C++ build toolchain, `whisper.cpp`, and a compatible GGML model.
 
-Voice messages are transcribed entirely on the machine running the server. No
-speech API, paid service, API key, or audio upload to a transcription provider
-is used. The server accepts WebM, Ogg, M4A/MP4, WAV, MP3, and FLAC audio up to
-20 MB, converts it to 16 kHz mono WAV with `ffmpeg`, and runs `whisper-cli`.
+In both cases, Codex must be installed and authenticated on the host before the application starts.
 
-Install FFmpeg and the tools needed to build
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) before starting the
-application. The commands below install and build the native tools; the later
-application setup remains the same on every platform.
+## Prepare Codex authentication
 
-### macOS
-
-Install CMake and FFmpeg with [Homebrew](https://brew.sh/):
+Install the Codex CLI if it is not already available:
 
 ```bash
-brew install cmake ffmpeg
+npm install --global @openai/codex
 ```
 
-Build the official whisper.cpp source in a sibling directory. Its default build
-uses Metal acceleration on Apple Silicon:
+Start the sign-in flow:
 
 ```bash
-git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
-cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
-cmake --build ../whisper.cpp/build --config Release -j
-export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
-ffmpeg -version | head -n 1
-"$WHISPER_CPP_PATH" --help
+codex login
 ```
 
-### Linux (Debian or Ubuntu)
-
-Install the compiler, CMake, Git, curl, and FFmpeg, then build whisper.cpp:
+Choose **Sign in with ChatGPT** or another authentication method offered for your account. For a headless machine, use `codex login --device-auth`. Verify the result with:
 
 ```bash
-sudo apt update
-sudo apt install build-essential cmake curl ffmpeg git
-git clone https://github.com/ggml-org/whisper.cpp.git ../whisper.cpp
-cmake -S ../whisper.cpp -B ../whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
-cmake --build ../whisper.cpp/build --config Release -j
-export FFMPEG_PATH="$(command -v ffmpeg)"
-export WHISPER_CPP_PATH="$(cd ../whisper.cpp && pwd)/build/bin/whisper-cli"
-ffmpeg -version | head -n 1
-"$WHISPER_CPP_PATH" --help
+codex login status
 ```
 
-Use the corresponding compiler, CMake, and FFmpeg packages on other Linux
-distributions.
+Codex stores its configuration under `CODEX_HOME`, which defaults to `~/.codex`. The application reuses that directory. See the official [Codex CLI guide](https://learn.chatgpt.com/docs/cli) and [authentication documentation](https://learn.chatgpt.com/docs/auth) for current installation and sign-in options.
 
-### Windows (PowerShell)
+### Docker credential storage
 
-Install Git, CMake, and a Windows build linked from the official
-[FFmpeg download page](https://ffmpeg.org/download.html). Add FFmpeg's `bin`
-directory to `PATH`, or retain the full path to `ffmpeg.exe` for the configuration
-below. Also install a C++ compiler; one supported option is Visual Studio 2022
-with the **Desktop development with C++** workload. Ensure `git` and `cmake` are
-available in a new PowerShell session, then build whisper.cpp:
+Docker Compose mounts the host Codex directory read-only at `/codex-auth`. On startup, `auth.json` and `config.toml` are copied into a writable Docker-managed `CODEX_HOME` volume. This avoids permission failures caused by Windows bind mounts while keeping Codex sessions and runtime files writable. Credentials stored only in the operating system keychain are not available inside the container. If the Docker application reports an authentication error, configure file-backed credentials in `~/.codex/config.toml`:
 
-```powershell
-git clone https://github.com/ggml-org/whisper.cpp.git ..\whisper.cpp
-cmake -S ..\whisper.cpp -B ..\whisper.cpp\build -A x64
-cmake --build ..\whisper.cpp\build --config Release
+```toml
+cli_auth_credentials_store = "file"
 ```
 
-With the Visual Studio CMake generator, the executable is commonly written to
-`..\whisper.cpp\build\bin\Release\whisper-cli.exe`. Some generators instead
-write `..\whisper.cpp\build\bin\whisper-cli.exe`; use the path that exists in
-your build. Configure and verify both executables in the same PowerShell session
-that will start the application:
+Then run `codex login` again and confirm that `~/.codex/auth.json` exists. Treat this file as a secret: never commit, copy into the image, or share it. The repository's ignore rules exclude `.env`, but credentials live outside the repository and must be protected separately.
 
-```powershell
-$env:FFMPEG_PATH = (Get-Command ffmpeg.exe).Source
-$env:WHISPER_CPP_PATH = (Resolve-Path "..\whisper.cpp\build\bin\Release\whisper-cli.exe").Path
-& $env:FFMPEG_PATH -version
-& $env:WHISPER_CPP_PATH --help
-```
+## Environment configuration
 
-If `ffmpeg.exe` is not on `PATH`, assign its full path instead. PowerShell quotes
-paths containing spaces when assigning them; the quote characters are not part
-of the value. Do not put literal quote characters inside any executable-path
-environment variable, and point these variables directly to `.exe` files rather
-than `.cmd` or `.bat` wrappers.
+The server requires a root-level `.env` file even when all values would otherwise use defaults. Create it from the supplied template.
 
-### Download and verify the model
-
-From the project root on macOS or Linux, download the multilingual `base` model
-and verify its SHA-1 digest:
+On macOS or Linux:
 
 ```bash
-mkdir -p models
-curl --fail --location \
-  --output models/ggml-base.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-export WHISPER_MODEL_PATH="$(pwd)/models/ggml-base.bin"
+cp .env.example .env
 ```
-
-Verify it with `shasum -a 1 models/ggml-base.bin` on macOS or
-`sha1sum models/ggml-base.bin` on Linux.
 
 On Windows PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force models | Out-Null
-Invoke-WebRequest `
-  -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
-  -OutFile "models\ggml-base.bin"
-Get-FileHash -Algorithm SHA1 "models\ggml-base.bin"
-$env:WHISPER_MODEL_PATH = (Resolve-Path "models\ggml-base.bin").Path
+Copy-Item .env.example .env
 ```
 
-The expected SHA-1 for `ggml-base.bin` is
-`465707469ff3a37a2b9b8d8f89f2f99de7299dac`. The model is ignored by Git. An
-absolute model path is recommended; project-relative paths are resolved from
-the repository root. `FFMPEG_PATH` and `WHISPER_CPP_PATH` may be either native
-executable names on `PATH` or full paths. Full paths containing spaces work
-without extra escaping because the server does not invoke a shell.
+Review every value before starting the application:
 
-After the tools and model have been installed, keep these environment variables
-set and start the application using the commands in [Setup](#setup).
-`AUDIO_TRANSCRIPTION_TIMEOUT_MS` can override the 120-second per-command
-timeout. Missing tools, an unreadable model, unsupported audio bytes, empty
-speech, command failures, and timeouts are returned as errors; the app does not
-send a fake or empty transcript to Codex. If a timed-out native process does not
-confirm that it has closed, the server retains that request's temporary audio
-directory rather than risk deleting files that are still in use. Such uncommon
-directories remain in the operating system's temporary-files location for
-system or manual cleanup.
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `SERVER_PORT` | No | `3001` | Express server port. It takes precedence over the legacy `PORT` variable. |
+| `PORT` | No | — | Legacy server-port fallback used only when `SERVER_PORT` is absent. |
+| `CLIENT_PORT` | No | `5173` | Vite port and Docker host/container port. |
+| `WHISPER_LANGUAGE` | No | `auto` | Language passed to local transcription. Use a language supported by the installed Whisper model. |
+| `WHISPER_MODEL_PATH` | Yes | `models/ggml-base.bin` | Whisper GGML model path. Relative paths are resolved from the repository root. The value must be present in `.env`. |
+| `FFMPEG_PATH` | No | `ffmpeg` | FFmpeg command name or executable path. Relative paths containing directory separators are resolved from the repository root. |
+| `WHISPER_CPP_PATH` | No | auto-detected | `whisper-cli` command or executable path. Leave it unset when using the provided setup script. |
+| `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | `120000` | Positive transcription timeout in milliseconds. Invalid or non-positive values fall back to the default. |
+| `CODEX_AUTH_DIR` | Docker only | `${HOME}/.codex` on macOS/Linux; `${USERPROFILE}/.codex` when `HOME` is unset on Windows | Host directory from which `auth.json` and `config.toml` are imported into the writable container `CODEX_HOME`. This is consumed by Compose rather than the server. |
 
-## Setup
+Important configuration rules:
 
-1. Sign in to Codex if there is no active local session yet:
+- Port values must be integers from `1` to `65535`.
+- Do not add quotes unless they are part of the intended value.
+- Use absolute paths when a dependency is outside the repository.
+- On Windows, use a normal Windows path such as `C:\Tools\ffmpeg\bin\ffmpeg.exe`.
+- Never commit `.env` or Codex credentials.
+- Docker overrides `FFMPEG_PATH`, `WHISPER_CPP_PATH`, and `WHISPER_MODEL_PATH` with paths inside the image. Their `.env` values primarily control native development.
+- `CODEX_AUTH_DIR` must point to the directory that contains the authenticated Codex configuration, not directly to `auth.json`.
+
+For a non-default Codex directory, add an absolute host path to `.env`:
+
+```dotenv
+CODEX_AUTH_DIR=/absolute/path/to/.codex
+```
+
+On Windows with Docker Desktop, use a path that Docker can bind-mount and ensure the drive or directory is shared with Docker.
+
+## Run with Docker Compose
+
+Docker is the recommended first-run path.
+
+1. Start Docker Desktop and wait until the engine is ready.
+
+2. Prepare Codex authentication as described above.
+
+3. Create and review `.env`.
+
+4. Build and start the application:
 
    ```bash
-   codex login
+   docker compose up --build
    ```
 
-   Check the current status with:
+   The initial build compiles a pinned `whisper.cpp` revision and downloads the verified GGML Base model, so it can take several minutes.
+
+5. Open <http://localhost:5173>, or use the port configured by `CLIENT_PORT`.
+
+6. Stop the foreground process with `Ctrl+C`.
+
+7. For later starts, reuse the image:
 
    ```bash
-   codex login status
+   docker compose up
    ```
 
-2. Install dependencies for the root workspace, client, and server:
+Source files and `chats/` are bind-mounted from the host. Dependencies remain in a named Docker volume. Changes to dependency manifests or the Dockerfile require another build.
+
+## Run natively
+
+Native development gives the fastest frontend and backend edit cycle, but local audio dependencies must be prepared separately.
+
+1. Install workspace dependencies from the repository root:
 
    ```bash
    npm install
    ```
 
-3. Start the application in development mode:
+2. Install FFmpeg and confirm that `ffmpeg -version` succeeds, or set `FFMPEG_PATH` in `.env` to its executable.
+
+3. Build the pinned `whisper.cpp` version on macOS or Linux:
 
    ```bash
-   npm start
+   ./scripts/setup-whisper.sh
    ```
 
-   or:
+   On Windows PowerShell, run:
+
+   ```powershell
+   .\scripts\setup-whisper.ps1
+   ```
+
+   The scripts require CMake and a platform C/C++ toolchain. They install under `.local/`, where the server discovers `whisper-cli` automatically.
+
+4. Place a compatible GGML Whisper model at `models/ggml-base.bin`, or set `WHISPER_MODEL_PATH` to another model file. The setup scripts compile `whisper.cpp`; they do not download the model.
+
+5. Start both development servers:
 
    ```bash
    npm run dev
    ```
 
-4. Open <http://localhost:5173>.
-
-## Usage
-
-Enter a prompt in the chat composer and send it with Enter or the send button.
-Shift+Enter inserts a new line. The composer is disabled while a request is
-running, and the pending model message shows a thinking indicator.
-
-To use voice, select the microphone, speak a question, stop the recording, and
-send it. The browser chooses a supported MediaRecorder format and the app
-checks the recorded container bytes before naming the file. The saved user
-message contains the local transcript and retains the original recording for
-playback. If the browser labels Ogg bytes as WebM, the server stores those
-unchanged bytes with the correct `.ogg` extension and `audio/ogg` MIME type.
-
-The left sidebar lists saved chats. You can switch between chats, start a new
-chat after the current chat has at least one message, and rename existing
-chats. Empty draft chats are not created from the New chat button.
+6. Open <http://localhost:5173>.
 
-The transcript supports:
+7. Stop the foreground process with `Ctrl+C`. If the launcher was detached or interrupted and recorded processes remain, run:
 
-- Markdown paragraphs, quotes, lists, headings, links, inline code, and bold
-  text,
-- fenced code blocks rendered inline with language labels,
-- syntax highlighting for common languages such as JavaScript, TypeScript,
-  JSON, CSS, HTML, Markdown, Python, and shell scripts,
-- copy buttons on code blocks.
+   ```bash
+   npm run stop
+   ```
 
-## Persistent Chat Archive
-
-Chats are stored under `chats/` at the project root and are retained across
-server restarts. The archive is organized by request date:
+Text chat remains available if an audio dependency is missing. The server reports audio diagnostics at startup, and voice requests fail with a focused error until the dependency is corrected.
 
-```text
-chats/
-  2026-09-19/
-    2026-09-19T19-43-29-435Z_b1145277/
-      chat.md
-      messages/
-        001-user.md
-        002-assistant.md
-      resources/
-        src/example.js
-        src/example.js.meta.md
-```
+## Development commands
 
-`chat.md` stores chat metadata such as id, title, creation date, and update
-date. Each message is saved as its own Markdown file in `messages/`. Assistant
-messages link to generated resources when a response contains fenced code
-blocks.
+Run these commands from the repository root:
 
-The archive is also an Obsidian-compatible vault. `chat.md` links to every
-message, messages link back to their chat and to the previous message, and
-resource metadata links to the assistant message that produced it. Existing
-archives are reindexed when the server starts, so their chat and message nodes
-also appear as a connected graph in Obsidian.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the client and server in watch mode. |
+| `npm run dev:client` | Start only Vite. |
+| `npm run dev:server` | Start only the Express server with TypeScript watch mode. |
+| `npm run stop` | Stop process trees recorded by the combined development launcher. |
+| `npm test` | Run server tests followed by client tests. |
+| `npm run build` | Type-check and build both packages. |
+| `npm --prefix client run preview` | Preview the built frontend. |
 
-Resources are saved in the selected chat's `resources/` folder. Each resource
-keeps the generated code content, while its `.meta.md` sidecar stores the
-language, producing message id, and backlink to the message file.
+## Using the application
 
-When Codex returns fenced code blocks, the server extracts each block. If a
-code block includes a safe relative path in the fence info, that path is used.
+1. Open the web interface and enter a prompt.
+2. Press `Enter` to send or `Shift+Enter` to insert a new line.
+3. Use the attachment button to add one file. Images are passed to Codex as image input; other files are archived and made available to Codex through their local path.
+4. Use the microphone button to record a voice message. The browser recording is normalized by FFmpeg and transcribed locally before the transcript is sent to Codex.
+5. Open the chat-history panel to revisit, rename, or delete conversations.
+6. Open the resources panel to inspect and copy files extracted from assistant code blocks.
 
-For example:
+Uploads are limited to 20 MiB. Supported audio containers are WebM, Ogg, M4A/MP4, WAV, MP3, and FLAC. Browser microphone permission is required for recording.
 
-````markdown
-```js src/example.js
-export function example() {
-  return "hello";
-}
-```
-````
+## Local data and security
 
-If no path is provided, the server generates a filename such as
-`002-assistant__001.js`. Supported language-derived extensions include `js`,
-`jsx`, `ts`, `tsx`, `json`, `css`, `html`, `md`, `py`, and `sh`. Unknown
-languages fall back to `.txt`.
+- Each chat has a dedicated directory under `chats/` with metadata, message Markdown files, attachments, and generated resources.
+- Deleting a chat removes its local archive directory.
+- The Codex SDK receives the repository root as its working directory and uses `workspace-write` sandbox mode.
+- Uploaded non-image files are made available to Codex by local path. Only attach files that are appropriate to process with the active OpenAI account.
+- Voice transcription is local, but the resulting transcript becomes part of the prompt sent to Codex.
+- The application has no user authentication layer of its own and is designed for local access. Do not expose it directly to an untrusted network.
 
-The `chats/` directory is ignored by Git. Older `responses/` and
-`code-block-responses/` folders are no longer used by the active app flow.
+## Troubleshooting
 
-## Development
+### The server says that `.env` is missing
 
-The client runs on <http://localhost:5173>. The server runs on
-<http://localhost:3001>. Vite proxies `/api/*` requests to the Express server,
-so browser code can call `/api/chats` without hardcoding the server origin.
+Create the root `.env` file from `.env.example`. The backend intentionally refuses to start without it.
 
-Run one side at a time if needed:
+### Codex authentication fails in Docker
 
-```bash
-npm run dev:client
-npm run dev:server
-```
+Run `codex login status` on the host, confirm that `CODEX_AUTH_DIR` points to the correct directory, and use file-backed credential storage as described in the Docker authentication section. Also confirm that Docker Desktop can mount the directory.
 
-Stop development servers started through `npm run dev` or `npm start` from
-another terminal:
+### Codex reports `Permission denied` in Docker Desktop
 
-```bash
-npm run stop
-```
+Rebuild and recreate the service so Compose uses the `codex_home` named volume. Codex writes sessions, cache, temporary files, and PATH aliases there instead of writing through the Windows bind mount. The host credential directory remains read-only and is used only as an import source.
 
-Build both projects:
+### The client reports that the server is starting
 
-```bash
-npm run build
-```
+The Vite proxy returns HTTP 503 while Express is unavailable. Inspect the server output for invalid ports, a missing `.env`, or authentication errors.
 
-Run tests:
+### Voice transcription fails
 
-```bash
-npm run test
-```
+Check the startup diagnostics. Confirm that the configured FFmpeg executable and `whisper-cli` run successfully, that `WHISPER_MODEL_PATH` points to a readable file, and that the uploaded audio is no larger than 20 MiB.
 
-Development conventions are documented in `DEVELOPMENT.md`.
+### A configured port is already in use
 
-## Authentication
-
-The server creates a Codex SDK client without passing an API key. The Codex
-process therefore picks up the existing local Codex authentication session.
-There is no need to create a `.env` file or set `OPENAI_API_KEY` for this setup.
-
-The session belongs to the operating-system user running the server. If the
-server is started under another user, in a container, or on another machine,
-that environment must have its own Codex login.
-
-Using an API key remains an optional alternative for non-interactive or CI
-environments, but it is not required for local use with an authenticated Codex
-session.
-
-## MCP Servers
-
-This app can use MCP servers configured in the local Codex environment. The
-server creates a Codex client without overriding MCP configuration, so Codex
-inherits the MCP servers available to the operating-system user running the app.
-
-MCP configuration can be stored globally in:
-
-```text
-~/.codex/config.toml
-```
-
-or at the project level in:
-
-```text
-.codex/config.toml
-```
-
-Project-level `.codex/config.toml` settings are loaded only for projects that
-Codex trusts.
-
-### Remote HTTP MCP Server
-
-A remote MCP server can be added with the Codex CLI:
-
-```bash
-codex mcp add pet-care --url https://mcp.example.com
-```
-
-Or it can be configured directly in `config.toml`:
-
-```toml
-[mcp_servers.pet-care]
-url = "https://mcp.example.com"
-```
-
-If the server uses bearer-token authentication, keep the token in an
-environment variable instead of storing the secret directly in the config:
-
-```toml
-[mcp_servers.pet-care]
-url = "https://mcp.example.com"
-bearer_token_env_var = "PET_CARE_MCP_TOKEN"
-```
-
-Then export the token before starting Codex or this application:
-
-```bash
-export PET_CARE_MCP_TOKEN="replace-with-your-token"
-npm run dev
-```
-
-### Local stdio MCP Server
-
-A local stdio MCP server can be configured with a command and arguments:
-
-```toml
-[mcp_servers.pet-care-local]
-command = "node"
-args = ["/absolute/path/to/pet-care-mcp/server.js"]
-```
-
-Use an absolute path when possible so that the MCP server can be started
-reliably regardless of the directory from which this application is launched.
-
-### OAuth Authentication
-
-Some remote MCP servers use OAuth instead of a static token. Complete the OAuth
-authorization flow supported by the MCP server and Codex before using the
-server through this application.
-
-Do not store real credentials, access tokens, or secrets in this repository.
-
-### Example Configuration
-
-The following example uses placeholder values for a pet-care platform:
-
-```toml
-[mcp_servers.pet-care]
-url = "https://mcp.example.com"
-bearer_token_env_var = "PET_CARE_MCP_TOKEN"
-
-[mcp_servers.pet-care-local]
-command = "node"
-args = ["/absolute/path/to/pet-care-mcp/server.js"]
-```
-
-Such an MCP server could expose tools for reading a pet profile, recording
-weight, managing feeding schedules, or recording expenses.
-
-### Verify MCP Tools
-
-Check that Codex sees the configured MCP servers:
-
-```bash
-codex mcp list
-```
-
-Before testing through this application, verify the connection directly in
-Codex by asking it to use one of the MCP server's tools.
-
-Then start this application and send a browser chat request that requires the
-external tool. Because the app uses the same local Codex configuration, the
-configured MCP tools should also be available when requests are sent through
-this app.
-
-### Troubleshooting
-
-If an MCP server cannot be used:
-
-- run `codex mcp list` and confirm that the server is configured,
-- verify the remote URL or local command and arguments,
-- make sure required environment variables are exported in the shell that
-  starts the application,
-- complete or refresh OAuth authentication if required,
-- make sure project-level `.codex/config.toml` is being loaded from a trusted
-  project,
-- test the MCP server directly in Codex to separate MCP configuration problems
-  from application problems,
-- restart the application after changing environment variables or MCP
-  configuration.
-
-The application also instructs Codex that available MCP tools may be used when
-a workflow requires reading data or performing actions in connected services.
-
-## Codex Model
-
-The server pins the Codex SDK model through `CODEX_MODEL` in
-`server/src/constants/index.ts`. The default is `gpt-5.6-terra`, which balances
-coding capability and cost. Change that constant if Codex reports that the
-current model is deprecated or if you want a different model for all browser
-chat requests handled by this app.
-
-## Environment Variables
-
-| Variable | Required | Description |
-| --- | --- | --- |
-| `PORT` | No | Express server port. Defaults to `3001`. |
-| `OPENAI_API_KEY` | No | Optional API-key authentication instead of the stored Codex session. |
-| `WHISPER_CPP_PATH` | For voice | Path to `whisper-cli`. Defaults to `whisper-cli` on `PATH`. |
-| `WHISPER_MODEL_PATH` | For voice | GGML model path. Defaults to `models/ggml-base.bin`. |
-| `FFMPEG_PATH` | For voice | Path to `ffmpeg`. Defaults to `ffmpeg` on `PATH`. |
-| `AUDIO_TRANSCRIPTION_TIMEOUT_MS` | No | Per-command audio timeout. Defaults to `120000`. |
+Choose unused `SERVER_PORT` and `CLIENT_PORT` values in `.env`, then restart both processes. Vite uses strict port binding and will not silently select another port.
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0.
-
-See the [LICENSE](LICENSE) file for the full text of the license.
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
