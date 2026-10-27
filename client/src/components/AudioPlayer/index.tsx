@@ -13,6 +13,7 @@ type ResourceLoadStatus = "loading" | "loaded" | "error";
 
 export type AudioPlayerProps = {
   src: string;
+  mimeType: string;
   label: string;
   durationSeconds?: number;
   waveform?: number[];
@@ -109,6 +110,7 @@ export function getVoicePlaybackLabel(isPlaying: boolean): string {
 
 export function AudioPlayer({
   src,
+  mimeType,
   label,
   durationSeconds,
   waveform,
@@ -150,7 +152,7 @@ export function AudioPlayer({
       stopDurationPolling();
       audio?.pause();
     };
-  }, [src, initialDuration]);
+  }, [src, mimeType, initialDuration]);
 
   function stopDurationPolling(): void {
     if (durationPollRef.current !== null) {
@@ -319,7 +321,6 @@ export function AudioPlayer({
     <div className="audio-player">
       <audio
         ref={audioRef}
-        src={src}
         preload="metadata"
         onCanPlay={() => {
           setPlaybackError("");
@@ -348,7 +349,9 @@ export function AudioPlayer({
           setPlaybackError("Audio could not be loaded.");
           setLoadStatus("error");
         }}
-      />
+      >
+        <source src={src} type={mimeType} />
+      </audio>
 
       {isLoading ? (
         <span

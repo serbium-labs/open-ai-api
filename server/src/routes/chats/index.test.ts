@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { createChatsRouter, processChatMessage } from "./index";
+import {
+  createChatsRouter,
+  getAttachmentMimeType,
+  processChatMessage,
+} from "./index";
 import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
 import type { AudioTranscriber } from "#services/audio-transcription";
@@ -15,6 +19,15 @@ const durationReader: AudioDurationReader = {
     return 4.25;
   },
 };
+
+test("attachment audio MIME types are explicit and case-insensitive", () => {
+  assert.equal(getAttachmentMimeType("voice.webm"), "audio/webm");
+  assert.equal(getAttachmentMimeType("voice.OGG"), "audio/ogg");
+  assert.equal(getAttachmentMimeType("voice.mp4"), "audio/mp4");
+  assert.equal(getAttachmentMimeType("voice.m4a"), "audio/mp4");
+  assert.equal(getAttachmentMimeType("voice.wav"), "audio/wav");
+  assert.equal(getAttachmentMimeType("notes.txt"), undefined);
+});
 
 type FakeCodex = {
   prompts: string[];

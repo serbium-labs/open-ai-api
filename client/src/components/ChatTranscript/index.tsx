@@ -684,6 +684,7 @@ function renderAttachment(
         ) : (
           <AudioPlayer
             src={audioUrl}
+            mimeType={attachment.mimeType}
             label={attachment.name}
             durationSeconds={attachment.durationSeconds}
           />

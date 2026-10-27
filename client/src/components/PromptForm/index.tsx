@@ -725,6 +725,7 @@ export function PromptForm({
               <div className="voice-preview">
                 <AudioPlayer
                   src={audioPreviewUrl}
+                  mimeType={attachment.type}
                   label={attachment.name}
                   waveform={waveform}
                 />

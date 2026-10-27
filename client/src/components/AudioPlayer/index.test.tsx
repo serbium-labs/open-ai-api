@@ -135,12 +135,20 @@ test("duration probes only restore playback for their original source", () => {
 
 test("AudioPlayer renders a loader while metadata is pending", () => {
   const markup: string = renderToStaticMarkup(
-    <AudioPlayer src="/voice.webm" label="voice-message.webm" />,
+    <AudioPlayer
+      src="/voice.webm"
+      mimeType="audio/webm"
+      label="voice-message.webm"
+    />,
   );
 
   assert.match(markup, /message-audio-skeleton/);
   assert.match(markup, /aria-label="Loading voice-message\.webm"/);
   assert.match(markup, /preload="metadata"/);
+  assert.match(
+    markup,
+    /<source src="\/voice\.webm" type="audio\/webm"\/?>/,
+  );
   assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
   assert.match(markup, /0:00 \/ --:--/);
@@ -152,6 +160,7 @@ test("AudioPlayer immediately uses a server-provided duration", () => {
   const markup: string = renderToStaticMarkup(
     <AudioPlayer
       src="/voice.webm"
+      mimeType="audio/webm"
       label="voice-message.webm"
       durationSeconds={4.25}
     />,
@@ -188,6 +197,7 @@ test("AudioPlayer reuses supplied waveform values", () => {
   const markup: string = renderToStaticMarkup(
     <AudioPlayer
       src="/recording.webm"
+      mimeType="audio/webm"
       label="recording.webm"
       waveform={[0.5, 1]}
     />,

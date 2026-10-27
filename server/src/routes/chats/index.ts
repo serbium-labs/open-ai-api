@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 
 import multer from "multer";
 import {
@@ -49,6 +49,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Unexpected server error";
+}
+
+const ATTACHMENT_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".m4a": "audio/mp4",
+  ".mp4": "audio/mp4",
+  ".oga": "audio/ogg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".webm": "audio/webm",
+};
+
+export function getAttachmentMimeType(path: string): string | undefined {
+  return ATTACHMENT_MIME_TYPES[extname(path).toLowerCase()];
 }
 
 type ProcessChatMessageOptions = {
@@ -273,6 +286,13 @@ export function createChatsRouter(
             request.params.chatId,
             request.params.attachmentName,
           );
+
+        const mimeType: string | undefined =
+          getAttachmentMimeType(attachmentPath);
+
+        if (mimeType !== undefined) {
+          response.type(mimeType);
+        }
 
         response.sendFile(attachmentPath);
       } catch (error: unknown) {
