@@ -140,6 +140,7 @@ test("AudioPlayer renders a loader while metadata is pending", () => {
 
   assert.match(markup, /message-audio-skeleton/);
   assert.match(markup, /aria-label="Loading voice-message\.webm"/);
+  assert.match(markup, /preload="metadata"/);
   assert.doesNotMatch(markup, /type="range"/);
   assert.doesNotMatch(markup, / controls=""/);
   assert.match(markup, /0:00 \/ --:--/);
