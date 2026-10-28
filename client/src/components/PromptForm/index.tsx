@@ -52,6 +52,32 @@ type SubmissionLock = {
   current: boolean;
 };
 
+type SubmitAvailability = {
+  isRunning: boolean;
+  isSubmitting: boolean;
+  isRecording: boolean;
+  isRequestingMicrophone: boolean;
+  isFinalizingRecording: boolean;
+  isPromptEmpty: boolean;
+  hasAttachment: boolean;
+};
+
+export function isComposerSubmitDisabled({
+  isRunning,
+  isSubmitting,
+  isRecording,
+  isRequestingMicrophone,
+  isFinalizingRecording,
+  isPromptEmpty,
+  hasAttachment,
+}: SubmitAvailability): boolean {
+  return isRunning ||
+    isSubmitting ||
+    isRequestingMicrophone ||
+    isFinalizingRecording ||
+    (isPromptEmpty && !hasAttachment && !isRecording);
+}
+
 type RunSubmissionOptions = {
   lock: SubmissionLock;
   prompt: string;
@@ -304,6 +330,8 @@ export function PromptForm({
 
   const isSubmittingRef = useRef<boolean>(false);
 
+  const submitRecordingOnStopRef = useRef<boolean>(false);
+
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState<string>("");
 
@@ -341,13 +369,15 @@ export function PromptForm({
     ? "Attachment limit reached"
     : `Attach files (${attachments.length}/${MAX_ATTACHMENTS})`;
 
-  const isSubmitDisabled: boolean =
-    isRunning ||
-    isSubmitting ||
-    isRecording ||
-    isRequestingMicrophone ||
-    isFinalizingRecording ||
-    (isPromptEmpty && !hasAttachment);
+  const isSubmitDisabled: boolean = isComposerSubmitDisabled({
+    isRunning,
+    isSubmitting,
+    isRecording,
+    isRequestingMicrophone,
+    isFinalizingRecording,
+    isPromptEmpty,
+    hasAttachment,
+  });
 
   const submitTooltip: string = isRunning || isSubmitting
     ? hasAttachment
@@ -355,8 +385,10 @@ export function PromptForm({
       : UI_TEXT.running
     : isFinalizingRecording
       ? "Preparing voice recording..."
-      : isRecording || isRequestingMicrophone
-        ? "Stop recording before sending"
+      : isRecording
+        ? "Send voice message"
+      : isRequestingMicrophone
+        ? "Waiting for microphone access"
       : isPromptEmpty && !hasAttachment
         ? UI_TEXT.emptyPromptTooltip
         : UI_TEXT.runButton;
@@ -530,6 +562,7 @@ export function PromptForm({
 
       recorder.onerror = () => {
         recorder.onstop = null;
+        submitRecordingOnStopRef.current = false;
         stopMediaStream(stream);
         mediaRecorderRef.current = null;
         audioChunksRef.current = [];
@@ -542,6 +575,9 @@ export function PromptForm({
       };
 
       recorder.onstop = () => {
+        const shouldSubmit: boolean =
+          submitRecordingOnStopRef.current;
+        submitRecordingOnStopRef.current = false;
         const chunks: Blob[] = audioChunksRef.current;
         audioChunksRef.current = [];
         stopMediaStream(stream);
@@ -570,6 +606,19 @@ export function PromptForm({
 
             const previewUrl: string = URL.createObjectURL(blob);
             audioPreviewUrlRef.current = previewUrl;
+            const finalizedAttachments: File[] = [...attachments, file];
+
+            if (shouldSubmit) {
+              setAttachmentError("");
+              setAudioPreviewUrl(previewUrl);
+              void submitFinalizedMessage(
+                finalizedAttachments,
+                previewUrl,
+                [],
+              );
+              return;
+            }
+
             setAttachments((current: File[]) => {
               if (current.length >= MAX_ATTACHMENTS) {
                 setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
@@ -666,6 +715,7 @@ export function PromptForm({
     }
 
     audioChunksRef.current = [];
+    submitRecordingOnStopRef.current = false;
     mediaRecorderRef.current = null;
     stopMediaStream(stream);
     setIsRecording(false);
@@ -688,15 +738,11 @@ export function PromptForm({
     void startRecording();
   }
 
-  async function submitMessage(): Promise<void> {
-    if (isSubmitDisabled || isSubmittingRef.current) {
-      return;
-    }
-
-    const submittedAttachments: File[] = attachments;
-    const submittedAudioPreviewUrl: string | null =
-      audioPreviewUrlRef.current;
-    const submittedWaveform: number[] = waveform;
+  async function submitFinalizedMessage(
+    submittedAttachments: File[],
+    submittedAudioPreviewUrl: string | null,
+    submittedWaveform: number[],
+  ): Promise<void> {
     const isVoiceSubmission: boolean =
       submittedAudioPreviewUrl !== null;
 
@@ -759,6 +805,24 @@ export function PromptForm({
         }
       },
     });
+  }
+
+  async function submitMessage(): Promise<void> {
+    if (isRecording) {
+      submitRecordingOnStopRef.current = true;
+      stopRecording();
+      return;
+    }
+
+    if (isSubmitDisabled || isSubmittingRef.current) {
+      return;
+    }
+
+    await submitFinalizedMessage(
+      attachments,
+      audioPreviewUrlRef.current,
+      waveform,
+    );
   }
 
   function handleSubmit(
@@ -849,7 +913,11 @@ export function PromptForm({
           </p>
         )}
 
-        <div className="prompt-input-row">
+        <div
+          className={`prompt-input-row${
+            isRecording ? " prompt-input-row-recording" : ""
+          }`}
+        >
           <input
             ref={fileInputRef}
             className="attachment-input"

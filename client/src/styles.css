@@ -391,6 +391,9 @@ h1 {
   gap: 10px;
   width: 100%;
 }
+.prompt-input-row-recording {
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+}
 textarea {
   min-height: 44px;
   max-height: 180px;

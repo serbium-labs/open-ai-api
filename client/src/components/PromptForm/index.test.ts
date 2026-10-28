@@ -6,9 +6,22 @@ import {
   addAttachments,
   createRecordedAudioFile,
   detectRecordedAudioFormat,
+  isComposerSubmitDisabled,
   runComposerSubmission,
   selectRecorderMimeType,
 } from "./index";
+
+test("submit stays enabled while a voice recording is active", () => {
+  assert.equal(isComposerSubmitDisabled({
+    isRunning: false,
+    isSubmitting: false,
+    isRecording: true,
+    isRequestingMicrophone: false,
+    isFinalizingRecording: false,
+    isPromptEmpty: true,
+    hasAttachment: false,
+  }), false);
+});
 
 test("uses a clear error when the attachment limit is reached", () => {
   assert.equal(ATTACHMENT_LIMIT_ERROR, "Attachment limit reached");
