@@ -1,0 +1,46 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    init: true
+    env_file:
+      - .env
+    environment:
+      CODEX_HOME: /home/node/.codex
+      HOME: /home/node
+      XDG_CACHE_HOME: /home/node/.codex/cache
+      XDG_CONFIG_HOME: /home/node/.codex/config
+      TMPDIR: /home/node/.codex/tmp
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      WHISPER_CPP_PATH: /opt/whisper/bin/whisper-cli
+      WHISPER_MODEL_PATH: /opt/whisper/models/ggml-base.bin
+    ports:
+      - "${CLIENT_PORT:-5173}:${CLIENT_PORT:-5173}"
+    volumes:
+      # Live source editing; image-provided dependencies stay in their own volume.
+      - type: bind
+        source: .
+        target: /app
+      - type: volume
+        source: node_modules
+        target: /app/node_modules
+      # Keep chat history in the repository. Codex itself writes only to a
+      # Linux-managed volume; the host login is imported by the entrypoint.
+      - type: bind
+        source: ./chats
+        target: /app/chats
+      - type: volume
+        source: codex_home
+        target: /home/node/.codex
+      - type: bind
+        # HOME is commonly unset in Windows PowerShell. Fall back to
+        # USERPROFILE there so the host Codex login is mounted correctly.
+        source: ${CODEX_AUTH_DIR:-${HOME:-${USERPROFILE}}/.codex}
+        target: /codex-auth
+        read_only: true
+
+volumes:
+  node_modules:
+  codex_home:

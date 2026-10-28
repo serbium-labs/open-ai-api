@@ -5,11 +5,13 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { UTF8_ENCODING } from "#constants";
+import type { ServerConfig } from "#config";
 
 export type AudioTranscriptionRequest = {
   path: string;
@@ -28,6 +30,7 @@ export type CommandRunner = (
 
 export type AudioTranscriptionServiceDependencies = {
   ffmpegExecutable: string;
+  language: string;
   maxFileSizeBytes: number;
   modelPath: string;
   timeoutMs: number;
@@ -36,19 +39,63 @@ export type AudioTranscriptionServiceDependencies = {
 };
 
 const MAX_DIAGNOSTIC_LENGTH = 4_000;
+const TERMINATION_GRACE_MS = 1_000;
+const DEPENDENCY_PROBE_TIMEOUT_MS = 5_000;
 
-export const runLocalCommand: CommandRunner = (
+export type AudioDependencyDiagnostic = {
+  dependency: "FFmpeg" | "Whisper model" | "whisper.cpp";
+  message: string;
+};
+
+export class LocalAudioCommandTimeoutError extends Error {
+  public constructor(
+    command: string,
+    timeoutMs: number,
+    public readonly terminationConfirmed: boolean,
+  ) {
+    super(`Local audio command timed out after ${timeoutMs} ms: ${command}`);
+    this.name = "LocalAudioCommandTimeoutError";
+  }
+}
+
+export const runLocalCommand = (
   command: string,
   args: string[],
   timeoutMs: number,
+  spawnCommand: typeof spawn = spawn,
 ): Promise<void> =>
   new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawnCommand(command, args, {
       shell: false,
       stdio: ["ignore", "ignore", "pipe"],
     });
     let diagnostic = "";
     let settled = false;
+    let timedOut = false;
+    let timer: NodeJS.Timeout;
+    let terminationTimer: NodeJS.Timeout | undefined;
+
+    const clearTimers = (): void => {
+      clearTimeout(timer);
+
+      if (terminationTimer !== undefined) {
+        clearTimeout(terminationTimer);
+      }
+    };
+
+    const rejectTimeout = (terminationConfirmed: boolean): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimers();
+      reject(new LocalAudioCommandTimeoutError(
+        command,
+        timeoutMs,
+        terminationConfirmed,
+      ));
+    };
 
     child.stderr.setEncoding(UTF8_ENCODING);
     child.stderr.on("data", (chunk: string) => {
@@ -57,25 +104,33 @@ export const runLocalCommand: CommandRunner = (
       );
     });
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       if (settled) {
         return;
       }
 
-      settled = true;
-      child.kill("SIGKILL");
-      reject(new Error(
-        `Local audio command timed out after ${timeoutMs} ms: ${command}`,
-      ));
+      timedOut = true;
+      terminationTimer = setTimeout(
+        () => rejectTimeout(false),
+        TERMINATION_GRACE_MS,
+      );
+
+      try {
+        child.kill("SIGKILL");
+      } catch {}
     }, timeoutMs);
 
-    child.once("error", (error: NodeJS.ErrnoException) => {
+    child.on("error", (error: NodeJS.ErrnoException) => {
       if (settled) {
         return;
       }
 
+      if (timedOut) {
+        return;
+      }
+
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
       reject(
         error.code === "ENOENT"
           ? new Error(
@@ -90,8 +145,13 @@ export const runLocalCommand: CommandRunner = (
         return;
       }
 
+      if (timedOut) {
+        rejectTimeout(true);
+        return;
+      }
+
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
 
       if (code === 0) {
         resolve();
@@ -106,6 +166,108 @@ export const runLocalCommand: CommandRunner = (
       ));
     });
   });
+
+async function assertReadableModel(modelPath: string): Promise<void> {
+  try {
+    await access(modelPath, constants.R_OK);
+    const modelStats = await stat(modelPath);
+
+    if (!modelStats.isFile()) {
+      throw new Error("the configured path is not a file");
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? ` (${error.message})` : "";
+    throw new Error(
+      `Whisper model unavailable (WHISPER_MODEL_PATH="${modelPath}")${detail}. ` +
+      "Download the model as described in README.md or correct WHISPER_MODEL_PATH in .env.",
+    );
+  }
+}
+
+function commandUnavailableMessage(
+  dependency: "FFmpeg" | "whisper.cpp",
+  environmentVariable: "FFMPEG_PATH" | "WHISPER_CPP_PATH",
+  executable: string,
+  error: unknown,
+): string {
+  const detail = error instanceof Error ? error.message : "unknown error";
+  const instruction = dependency === "FFmpeg"
+    ? "Install FFmpeg or correct FFMPEG_PATH in .env."
+    : "Run the Stage 1 whisper.cpp setup script or correct WHISPER_CPP_PATH in .env.";
+
+  return `${dependency} unavailable (${environmentVariable}="${executable}"): ${detail}. ${instruction}`;
+}
+
+export async function diagnoseAudioDependencies(
+  dependencies: AudioTranscriptionServiceDependencies,
+  runCommand: CommandRunner = runLocalCommand,
+): Promise<AudioDependencyDiagnostic[]> {
+  const checks = await Promise.all([
+    runCommand(
+      dependencies.ffmpegExecutable,
+      ["-version"],
+      DEPENDENCY_PROBE_TIMEOUT_MS,
+    ).then<AudioDependencyDiagnostic | undefined>(
+      () => undefined,
+    ).catch((error: unknown): AudioDependencyDiagnostic => ({
+      dependency: "FFmpeg",
+      message: commandUnavailableMessage(
+        "FFmpeg",
+        "FFMPEG_PATH",
+        dependencies.ffmpegExecutable,
+        error,
+      ),
+    })),
+    runCommand(
+      dependencies.whisperExecutable,
+      ["--help"],
+      DEPENDENCY_PROBE_TIMEOUT_MS,
+    ).then<AudioDependencyDiagnostic | undefined>(
+      () => undefined,
+    ).catch((error: unknown): AudioDependencyDiagnostic => ({
+      dependency: "whisper.cpp",
+      message: commandUnavailableMessage(
+        "whisper.cpp",
+        "WHISPER_CPP_PATH",
+        dependencies.whisperExecutable,
+        error,
+      ),
+    })),
+    assertReadableModel(dependencies.modelPath).then<AudioDependencyDiagnostic | undefined>(
+      () => undefined,
+    ).catch((error: unknown): AudioDependencyDiagnostic => ({
+      dependency: "Whisper model",
+      message: error instanceof Error ? error.message : String(error),
+    })),
+  ]);
+
+  return checks.filter(
+    (diagnostic): diagnostic is AudioDependencyDiagnostic =>
+      diagnostic !== undefined,
+  );
+}
+
+export async function reportAudioDependencyDiagnostics(
+  serverConfig: ServerConfig,
+  diagnose: typeof diagnoseAudioDependencies = diagnoseAudioDependencies,
+  warn: (message: string) => void = console.warn,
+): Promise<void> {
+  try {
+    const diagnostics = await diagnose(serverConfig.audioTranscription);
+
+    for (const diagnostic of diagnostics) {
+      warn(
+        `[audio] ${diagnostic.message} Text chat remains available; voice requests will fail until this dependency is fixed.`,
+      );
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    warn(
+      `[audio] Dependency diagnostics could not complete: ${detail}. ` +
+      "Text chat remains available and audio dependencies will be checked again on each voice request.",
+    );
+  }
+}
 
 export class AudioTranscriptionService implements AudioTranscriber {
   private readonly runCommand: CommandRunner;
@@ -126,56 +288,77 @@ export class AudioTranscriptionService implements AudioTranscriber {
       );
     }
 
-    try {
-      await access(this.dependencies.modelPath, constants.R_OK);
-    } catch {
-      throw new Error(
-        `Local Whisper model not found or unreadable: ${this.dependencies.modelPath}. See README.md for setup instructions.`,
-      );
-    }
+    await assertReadableModel(this.dependencies.modelPath);
 
     const temporaryDirectory = await mkdtemp(
       join(tmpdir(), "codex-audio-transcription-"),
     );
     const wavPath = join(temporaryDirectory, "normalized.wav");
     const outputPrefix = join(temporaryDirectory, "transcript");
+    let cleanupIsSafe = true;
 
     try {
-      await this.runCommand(
-        this.dependencies.ffmpegExecutable,
-        [
-          "-v",
-          "error",
-          "-nostdin",
-          "-y",
-          "-i",
-          path,
-          "-ar",
-          "16000",
-          "-ac",
-          "1",
-          "-c:a",
-          "pcm_s16le",
-          wavPath,
-        ],
-        this.dependencies.timeoutMs,
-      );
+      try {
+        await this.runCommand(
+          this.dependencies.ffmpegExecutable,
+          [
+            "-v",
+            "error",
+            "-nostdin",
+            "-y",
+            "-i",
+            path,
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            wavPath,
+          ],
+          this.dependencies.timeoutMs,
+        );
+      } catch (error: unknown) {
+        if (error instanceof LocalAudioCommandTimeoutError) {
+          throw error;
+        }
 
-      await this.runCommand(
-        this.dependencies.whisperExecutable,
-        [
-          "-m",
-          this.dependencies.modelPath,
-          "-l",
-          "auto",
-          "-f",
-          wavPath,
-          "-otxt",
-          "-of",
-          outputPrefix,
-        ],
-        this.dependencies.timeoutMs,
-      );
+        throw new Error(commandUnavailableMessage(
+          "FFmpeg",
+          "FFMPEG_PATH",
+          this.dependencies.ffmpegExecutable,
+          error,
+        ));
+      }
+
+      try {
+        await this.runCommand(
+          this.dependencies.whisperExecutable,
+          [
+            "-m",
+            this.dependencies.modelPath,
+            "-l",
+            this.dependencies.language,
+            "-f",
+            wavPath,
+            "-otxt",
+            "-of",
+            outputPrefix,
+          ],
+          this.dependencies.timeoutMs,
+        );
+      } catch (error: unknown) {
+        if (error instanceof LocalAudioCommandTimeoutError) {
+          throw error;
+        }
+
+        throw new Error(commandUnavailableMessage(
+          "whisper.cpp",
+          "WHISPER_CPP_PATH",
+          this.dependencies.whisperExecutable,
+          error,
+        ));
+      }
 
       let transcript: string;
 
@@ -204,11 +387,22 @@ export class AudioTranscriptionService implements AudioTranscriber {
       }
 
       return transcript;
+    } catch (error: unknown) {
+      if (
+        error instanceof LocalAudioCommandTimeoutError &&
+        !error.terminationConfirmed
+      ) {
+        cleanupIsSafe = false;
+      }
+
+      throw error;
     } finally {
-      await rm(temporaryDirectory, {
-        recursive: true,
-        force: true,
-      }).catch(() => {});
+      if (cleanupIsSafe) {
+        await rm(temporaryDirectory, {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+      }
     }
   }
 }
