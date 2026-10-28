@@ -887,6 +887,7 @@ input[type="range"]:focus-visible {
 .code-file-actions {
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 6px;
 }
 
@@ -937,6 +938,8 @@ input[type="range"]:focus-visible {
   padding: 8px 10px 8px 12px;
 }
 .code-file-link {
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   border: 0;
   border-radius: 6px;
@@ -985,7 +988,41 @@ input[type="range"]:focus-visible {
 }
 
 .code-file h3 {
+  flex: 1 1 auto;
   font-size: 15px;
+}
+
+.attachment-resource-preview {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: var(--color-surface-muted);
+}
+
+.attachment-resource-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.attachment-resource-audio,
+.attachment-resource-file {
+  padding: 12px;
+}
+
+.attachment-resource-audio audio {
+  display: block;
+  width: 100%;
+}
+
+.attachment-resource-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 
 pre {

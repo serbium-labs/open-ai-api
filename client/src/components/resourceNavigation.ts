@@ -1,4 +1,4 @@
-import type { ChatResource } from "@models";
+type NavigableResource = { id: string; messageId: string };
 
 export type ResourceNavigationTarget = {
   resourceId: string;
@@ -16,12 +16,12 @@ export type TranscriptScrollMetrics = {
 };
 
 export function resolveResourceNavigation(
-  resources: ChatResource[],
+  resources: NavigableResource[],
   resourceId: string,
   requestId: number,
 ): ResourceNavigationTarget | undefined {
-  const resource: ChatResource | undefined = resources.find(
-    (candidate: ChatResource) => candidate.id === resourceId,
+  const resource: NavigableResource | undefined = resources.find(
+    (candidate: NavigableResource) => candidate.id === resourceId,
   );
 
   if (resource === undefined) {

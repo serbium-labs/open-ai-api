@@ -9,7 +9,7 @@ import {
   type ChatMessage,
   type ChatMessageAttachment,
 } from "@components/ChatTranscript";
-import { CodeFiles } from "@components/CodeFiles";
+import { CodeFiles, combineResources, type DisplayResource } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
 import {
   resolveResourceNavigation,
@@ -77,6 +77,12 @@ export function App(): ReactElement {
   const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const { codeStatus, currentChatId, files, messages } = conversationState;
+  const displayResources: DisplayResource[] = combineResources(files, messages, currentChatId);
+  const resourcesStatus: string = codeStatus === UI_TEXT.loadingCode
+    ? codeStatus
+    : displayResources.length === 0
+      ? UI_TEXT.emptyResources
+      : `${displayResources.length} resource${displayResources.length === 1 ? "" : "s"}`;
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sidebarState, dispatchSidebarAction] = useReducer(
@@ -357,7 +363,7 @@ export function App(): ReactElement {
   function handleResourceNavigate(resourceId: string): void {
     resourceNavigationRequestId.current += 1;
     setResourceNavigationTarget(
-      resolveResourceNavigation(files, resourceId, resourceNavigationRequestId.current),
+      resolveResourceNavigation(displayResources, resourceId, resourceNavigationRequestId.current),
     );
   }
 
@@ -584,8 +590,8 @@ export function App(): ReactElement {
       {isResourcesOpen ? (
         <aside className="resources-sidebar" aria-label="Chat resources">
           <CodeFiles
-            files={files}
-            status={codeStatus}
+            files={displayResources}
+            status={resourcesStatus}
             onResourceNavigate={handleResourceNavigate}
           />
         </aside>
