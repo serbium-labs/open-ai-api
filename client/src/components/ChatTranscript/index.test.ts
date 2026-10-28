@@ -72,7 +72,7 @@ test("appendPromptTurn puts the user attachment before the pending assistant", (
   assert.equal(result.messages[1]?.status, "pending");
 });
 
-test("pending voice turns show audio processing without an empty assistant container", () => {
+test("pending attachment turns show upload status before thinking", () => {
   const turn = appendPromptTurn([], "", [{
     name: "voice-message.webm",
     mimeType: "audio/webm",
@@ -83,16 +83,31 @@ test("pending voice turns show audio processing without an empty assistant conta
     createElement(ChatTranscript, {
       chatId: undefined,
       messages: turn.messages,
+      isUploadingAttachments: true,
     }),
   );
 
-  assert.match(markup, /Processing audio\.\.\./);
+  assert.match(markup, />Processing attachments</);
   assert.doesNotMatch(markup, />Thinking</);
-  assert.equal(markup.match(/class="message-content"/g)?.length, 1);
-  assert.match(
-    markup,
-    /class="chat-message chat-message-assistant chat-message-pending"[^>]*><\/article>/,
+});
+
+test("pending attachment turns switch to thinking after upload", () => {
+  const turn = appendPromptTurn([], "Review this", [{
+    name: "notes.pdf",
+    mimeType: "application/pdf",
+    path: "",
+    previewUrl: "blob:notes-preview",
+  }]);
+  const markup: string = renderToStaticMarkup(
+    createElement(ChatTranscript, {
+      chatId: undefined,
+      messages: turn.messages,
+      isUploadingAttachments: false,
+    }),
   );
+
+  assert.match(markup, />Thinking</);
+  assert.doesNotMatch(markup, />Processing attachments</);
 });
 
 test("text-only pending turns keep the thinking indicator", () => {
@@ -108,7 +123,7 @@ test("text-only pending turns keep the thinking indicator", () => {
   assert.doesNotMatch(markup, /Processing audio\.\.\./);
 });
 
-test("completed and failed voice turns remove audio processing status", () => {
+test("completed and failed voice turns remove pending status", () => {
   const attachment: ChatMessageAttachment = {
     name: "voice-message.webm",
     mimeType: "audio/webm",
@@ -144,7 +159,7 @@ test("completed and failed voice turns remove audio processing status", () => {
       }),
     );
 
-    assert.doesNotMatch(markup, /Processing audio\.\.\./);
+    assert.doesNotMatch(markup, /Processing attachments/);
     assert.match(markup, new RegExp(assistant.content));
   }
 });

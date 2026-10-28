@@ -6,6 +6,8 @@ import type {
 
 import type { ChatDetail, ChatSummary } from "@models";
 
+export type XMLHttpRequestFactory = () => XMLHttpRequest;
+
 async function readJsonResponse<TSuccess extends object>(
   response: Response,
   fallback?: TSuccess,
@@ -124,6 +126,8 @@ export async function submitChatMessage(
   prompt: string,
   attachmentOrFetch: File | null | typeof fetch = null,
   fetchImpl: typeof fetch = fetch,
+  onAttachmentUploadComplete?: () => void,
+  createXMLHttpRequest: XMLHttpRequestFactory = () => new XMLHttpRequest(),
 ): Promise<ChatPromptResponse> {
   const attachment: File | null =
     typeof attachmentOrFetch === "function"
@@ -155,6 +159,40 @@ export async function submitChatMessage(
   formData.append("prompt", prompt);
   formData.append("attachment", attachment);
 
+  if (requestFetch === fetch && onAttachmentUploadComplete !== undefined) {
+    return new Promise<ChatPromptResponse>((resolve, reject) => {
+      const request = createXMLHttpRequest();
+
+      request.open(
+        "POST",
+        `/api/chats/${encodeURIComponent(chatId)}/messages`,
+      );
+      request.responseType = "text";
+      request.upload.addEventListener("load", onAttachmentUploadComplete, {
+        once: true,
+      });
+      request.addEventListener("load", () => {
+        void readJsonResponse<ChatPromptResponse>(
+          new Response(request.responseText, {
+            status: request.status,
+            statusText: request.statusText,
+            headers: {
+              "content-type": request.getResponseHeader("content-type") ??
+                "application/json",
+            },
+          }),
+        ).then(resolve, reject);
+      });
+      request.addEventListener("error", () => {
+        reject(new Error("Network error while submitting message"));
+      });
+      request.addEventListener("abort", () => {
+        reject(new Error("Message submission was aborted"));
+      });
+      request.send(formData);
+    });
+  }
+
   const response: Response = await requestFetch(
     `/api/chats/${encodeURIComponent(chatId)}/messages`,
     {
@@ -162,6 +200,8 @@ export async function submitChatMessage(
       body: formData,
     },
   );
+
+  onAttachmentUploadComplete?.();
 
   return readJsonResponse<ChatPromptResponse>(response);
 }

@@ -84,6 +84,8 @@ export function App(): ReactElement {
       ? UI_TEXT.emptyResources
       : `${displayResources.length} resource${displayResources.length === 1 ? "" : "s"}`;
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] =
+    useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sidebarState, dispatchSidebarAction] = useReducer(
     reduceSidebarState,
@@ -250,10 +252,8 @@ export function App(): ReactElement {
     attachment: File | null,
   ): Promise<boolean> {
     const optimisticAttachments: ChatMessageAttachment[] = [];
-    const isVoiceAttachment: boolean =
-      attachment?.type.toLowerCase().startsWith("audio/") ?? false;
 
-    if (attachment !== null && isVoiceAttachment) {
+    if (attachment !== null) {
       const previewUrl: string = URL.createObjectURL(attachment);
       optimisticAttachmentUrlsRef.current.add(previewUrl);
       optimisticAttachments.push({
@@ -264,31 +264,21 @@ export function App(): ReactElement {
       });
     }
 
-    const nextTurn: AppendPromptTurnResult | null =
-      attachment === null || isVoiceAttachment
-        ? appendPromptTurn(
-            messages,
-            submittedPrompt,
-            optimisticAttachments,
-          )
-        : null;
+    const nextTurn: AppendPromptTurnResult = appendPromptTurn(
+      messages,
+      submittedPrompt,
+      optimisticAttachments,
+    );
 
-    if (nextTurn !== null) {
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        messages: nextTurn.messages,
-        codeStatus: UI_TEXT.loadingCode,
-      }));
-      setPrompt("");
-    }
+    setConversationState((currentState: ConversationState) => ({
+      ...currentState,
+      messages: nextTurn.messages,
+      codeStatus: UI_TEXT.loadingCode,
+    }));
+    setPrompt("");
 
     setSubmitError(null);
-    if (nextTurn === null) {
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        codeStatus: UI_TEXT.loadingCode,
-      }));
-    }
+    setIsUploadingAttachments(attachment !== null);
     setIsRunning(true);
 
     try {
@@ -300,7 +290,13 @@ export function App(): ReactElement {
         ...currentState,
         currentChatId: chat.id,
       }));
-      const result = await submitChatMessage(chat.id, submittedPrompt, attachment);
+      const result = await submitChatMessage(
+        chat.id,
+        submittedPrompt,
+        attachment,
+        fetch,
+        () => setIsUploadingAttachments(false),
+      );
 
       setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
       setConversationState(conversationStateFromChat(result.chat));
@@ -311,16 +307,16 @@ export function App(): ReactElement {
 
       setConversationState((currentState: ConversationState) => ({
         ...currentState,
-        messages: nextTurn === null
-          ? currentState.messages
-          : failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
+        messages: failAssistantMessage(
+          currentState.messages,
+          nextTurn.assistantMessageId,
+          message,
+        ),
         codeStatus: getCodeStatus(currentState.files),
       }));
-      if (nextTurn === null) {
-        setSubmitError(message);
-      }
       return false;
     } finally {
+      setIsUploadingAttachments(false);
       setIsRunning(false);
     }
   }
@@ -528,6 +524,7 @@ export function App(): ReactElement {
             <ChatTranscript
               messages={messages}
               chatId={currentChatId}
+              isUploadingAttachments={isUploadingAttachments}
               resourceNavigationTarget={resourceNavigationTarget}
             />
             <PromptForm

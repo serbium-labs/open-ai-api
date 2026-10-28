@@ -657,15 +657,15 @@ export function PromptForm({
       onStart: () => {
         setIsSubmitting(true);
         setRecordingError("");
+        setAttachment(null);
 
         if (isVoiceSubmission) {
-          setAttachment(null);
           audioPreviewUrlRef.current = null;
           setAudioPreviewUrl(null);
           setWaveform([]);
         }
 
-        if (isVoiceSubmission && fileInputRef.current !== null) {
+        if (fileInputRef.current !== null) {
           fileInputRef.current.value = "";
         }
       },
@@ -682,10 +682,6 @@ export function PromptForm({
         }
       },
       onFailure: () => {
-        if (!isVoiceSubmission) {
-          return;
-        }
-
         if (!isMountedRef.current) {
           if (submittedAudioPreviewUrl !== null) {
             URL.revokeObjectURL(submittedAudioPreviewUrl);
@@ -695,12 +691,15 @@ export function PromptForm({
         }
 
         setAttachment(submittedAttachment);
-        audioPreviewUrlRef.current = submittedAudioPreviewUrl;
-        setAudioPreviewUrl(submittedAudioPreviewUrl);
-        setWaveform(submittedWaveform);
-        setRecordingError(
-          "Voice message failed to send. Your recording was restored. Please try again.",
-        );
+
+        if (isVoiceSubmission) {
+          audioPreviewUrlRef.current = submittedAudioPreviewUrl;
+          setAudioPreviewUrl(submittedAudioPreviewUrl);
+          setWaveform(submittedWaveform);
+          setRecordingError(
+            "Voice message failed to send. Your recording was restored. Please try again.",
+          );
+        }
       },
       onFinish: () => {
         if (isMountedRef.current) {
