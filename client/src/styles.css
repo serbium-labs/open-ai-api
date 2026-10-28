@@ -879,8 +879,15 @@ input[type="range"]:focus-visible {
   white-space: nowrap;
 }
 
-.message-code figcaption .copy-button {
+.message-code figcaption .copy-button,
+.code-file-actions {
   flex: 0 0 auto;
+}
+
+.code-file-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .code-language-label {
@@ -949,6 +956,32 @@ input[type="range"]:focus-visible {
 .code-file-link:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+.download-button {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  line-height: 0;
+}
+
+.download-button:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.download-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
 }
 
 .code-file h3 {
