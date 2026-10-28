@@ -603,6 +603,31 @@ export function PromptForm({
     setIsFinalizingRecording(true);
   }
 
+  function cancelRecording(): void {
+    const recorder: MediaRecorder | null =
+      mediaRecorderRef.current;
+    const stream: MediaStream | null =
+      mediaStreamRef.current;
+
+    if (recorder !== null) {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.onerror = null;
+
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    }
+
+    audioChunksRef.current = [];
+    mediaRecorderRef.current = null;
+    stopMediaStream(stream);
+    setIsRecording(false);
+    setIsFinalizingRecording(false);
+    setRecordingElapsed(0);
+    setRecordingError("");
+  }
+
   function handleRecordButton(): void {
     if (isRecording) {
       stopRecording();
@@ -828,6 +853,19 @@ export function PromptForm({
           >
             <Icon name={isRecording ? "stop" : "microphone"} />
           </button>
+
+          {isRecording && (
+            <button
+              className="attachment-button recording-cancel-button icon-tooltip"
+              type="button"
+              aria-label="Cancel voice recording"
+              data-tooltip="Cancel recording"
+              data-tooltip-placement="top"
+              onClick={cancelRecording}
+            >
+              <Icon name="remove" />
+            </button>
+          )}
 
           {isRecording ? (
             <div

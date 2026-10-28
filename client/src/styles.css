@@ -483,6 +483,16 @@ input[type="range"]:focus-visible {
   color: #a91f1f;
 }
 
+.recording-cancel-button {
+  border-color: var(--color-error-border);
+  color: #a91f1f;
+}
+
+.recording-cancel-button:hover:not(:disabled) {
+  background: var(--color-error-surface);
+  color: #a91f1f;
+}
+
 .attachment-preview {
   display: flex;
   grid-column: 1 / -1;
