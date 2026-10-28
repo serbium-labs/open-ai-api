@@ -470,7 +470,7 @@ input[type="range"]:focus-visible {
   color: var(--color-text);
 }
 .attachment-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
 }
 .recording-stop-button {
   border-color: var(--color-error-border);
@@ -506,6 +506,15 @@ input[type="range"]:focus-visible {
   padding: 8px 10px;
   background: var(--color-surface-muted);
   color: var(--color-text);
+}
+.attachment-list {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachment-list .attachment-preview {
+  margin-bottom: 0;
 }
 .attachment-icon {
   flex: 0 0 auto;

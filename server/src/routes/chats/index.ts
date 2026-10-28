@@ -70,7 +70,7 @@ type ProcessChatMessageOptions = {
   chatArchiveService: ChatArchiveService;
   chatId: string;
   codexService: CodexService;
-  file: Express.Multer.File | undefined;
+  files: Express.Multer.File[];
   prompt: string;
 };
 
@@ -80,34 +80,29 @@ export async function processChatMessage({
   chatArchiveService,
   chatId,
   codexService,
-  file,
+  files,
   prompt,
 }: ProcessChatMessageOptions): Promise<ChatPromptResponse> {
   const previousChat = await chatArchiveService.loadChat(chatId);
 
   let userContent = prompt;
-  let normalizedAudio: NormalizedAudioUpload | undefined;
-  let durationSeconds: number | undefined;
-
-  if (
-    file !== undefined &&
-    looksLikeAudioUpload(file.originalname, file.mimetype)
-  ) {
-    normalizedAudio = await inspectAudioUpload(
-      file.path,
-      file.originalname,
-    );
-    durationSeconds = await audioDurationReader.readDurationSeconds(file.path);
-    const transcript = await audioTranscriber.transcribe({
-      path: file.path,
-      sizeBytes: file.size,
+  const incomingAttachments = [];
+  for (const file of files) {
+    let normalizedAudio: NormalizedAudioUpload | undefined;
+    let durationSeconds: number | undefined;
+    if (looksLikeAudioUpload(file.originalname, file.mimetype)) {
+      normalizedAudio = await inspectAudioUpload(file.path, file.originalname);
+      durationSeconds = await audioDurationReader.readDurationSeconds(file.path);
+      const transcript = await audioTranscriber.transcribe({ path: file.path, sizeBytes: file.size });
+      const transcriptContent = `Voice message transcript:\n${transcript}`;
+      userContent = userContent === "" ? transcriptContent : `${userContent}\n\n${transcriptContent}`;
+    }
+    incomingAttachments.push({
+      originalName: normalizedAudio?.originalName ?? file.originalname,
+      mimeType: normalizedAudio?.mimeType ?? file.mimetype,
+      temporaryPath: file.path,
+      durationSeconds,
     });
-    const transcriptContent =
-      `Voice message transcript:\n${transcript}`;
-
-    userContent = prompt === ""
-      ? transcriptContent
-      : `${prompt}\n\n${transcriptContent}`;
   }
 
   const context =
@@ -120,56 +115,41 @@ export async function processChatMessage({
         )}\n\nCurrent user request:\n${userContent}`
       : userContent;
 
-  const attachmentInput = file === undefined
-    ? undefined
-    : {
-        originalName:
-          normalizedAudio?.originalName ?? file.originalname,
-        mimeType: normalizedAudio?.mimeType ?? file.mimetype,
-        temporaryPath: file.path,
-        durationSeconds,
-      };
   const chatAfterUserMessage =
     await chatArchiveService.appendMessage(
       previousChat.id,
       "user",
       userContent,
-      attachmentInput,
+      incomingAttachments,
     );
 
-  const imagePath: string | undefined =
-    file?.mimetype.startsWith("image/")
-      ? file.path
-      : undefined;
+  const imagePaths: string[] = files
+    .filter((file: Express.Multer.File) => file.mimetype.startsWith("image/"))
+    .map((file: Express.Multer.File) => file.path);
 
   let codexContext = context;
 
-  if (
-    file !== undefined &&
-    normalizedAudio === undefined &&
-    !file.mimetype.startsWith("image/")
-  ) {
+  const ordinaryAttachments = chatAfterUserMessage.messages.at(-1)?.attachments.filter(
+    (attachment) => !attachment.mimeType.startsWith("image/") && !attachment.mimeType.startsWith("audio/"),
+  ) ?? [];
+  if (ordinaryAttachments.length > 0) {
     const userMessage = chatAfterUserMessage.messages.at(-1);
-    const attachment = userMessage?.attachments.at(0);
-
-    if (attachment !== undefined) {
+    const instructions = await Promise.all(ordinaryAttachments.map(async (attachment) => {
       const storedAttachmentPath =
         await chatArchiveService.getAttachmentPath(
           previousChat.id,
           attachment.path,
         );
-
-      const attachmentInstruction =
+      return (
         `Attached file:\n` +
         `Name: ${attachment.name}\n` +
         `MIME type: ${attachment.mimeType}\n` +
         `Local path: ${storedAttachmentPath}\n\n` +
-        `Inspect this file when answering the user.`;
-
-      codexContext = context.trim() === ""
-        ? attachmentInstruction
-        : `${context}\n\n${attachmentInstruction}`;
-    }
+        `Inspect this file when answering the user.`
+      );
+    }));
+    const attachmentInstruction = instructions.join("\n\n");
+    codexContext = context.trim() === "" ? attachmentInstruction : `${context}\n\n${attachmentInstruction}`;
   }
 
   const finalResponse = await codexService.run(
@@ -177,7 +157,7 @@ export async function processChatMessage({
     previousChat.codexThreadId,
     (id) =>
       chatArchiveService.saveThreadId(previousChat.id, id),
-    imagePath,
+    imagePaths,
   );
 
   const chat = await chatArchiveService.appendMessage(
@@ -400,7 +380,7 @@ export function createChatsRouter(
 
   router.post(
     "/:chatId/messages",
-    upload.single("attachment"),
+    upload.array("attachments", 5),
     async (
       request: Request<
         { chatId: string },
@@ -415,7 +395,11 @@ export function createChatsRouter(
             ? request.body.prompt.trim()
             : "";
 
-        if (!prompt && !request.file) {
+        const files: Express.Multer.File[] = Array.isArray(request.files)
+          ? request.files
+          : [];
+
+        if (!prompt && files.length === 0) {
           response
             .status(HTTP_STATUS.badRequest)
             .json({
@@ -433,7 +417,7 @@ export function createChatsRouter(
             chatArchiveService,
             chatId: request.params.chatId,
             codexService,
-            file: request.file,
+            files,
             prompt,
           }),
         );
@@ -450,11 +434,9 @@ export function createChatsRouter(
             error: errorMessage(error),
           });
       } finally {
-        if (request.file !== undefined) {
-          await rm(request.file.path, {
-            force: true,
-          }).catch(() => {});
-        }
+        await Promise.all((Array.isArray(request.files) ? request.files : []).map(
+          (file: Express.Multer.File) => rm(file.path, { force: true }).catch(() => {}),
+        ));
       }
     },
   );

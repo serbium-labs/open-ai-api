@@ -585,7 +585,7 @@ public async getAttachmentPath(
     chatId: string,
     role: ChatRole,
     content: string,
-    attachment?: IncomingAttachment,
+    attachments: IncomingAttachment[] = [],
   ): Promise<ChatDetail> {
     const location: StoredChatLocation | undefined =
       await this.findChatLocation(chatId);
@@ -609,27 +609,26 @@ public async getAttachmentPath(
       attachments: [],
     };
 
-    if (attachment !== undefined) {
+    if (attachments.length > 0) {
       await mkdir(attachmentsDirectory, { recursive: true });
 
-      const extension: string = extname(attachment.originalName);
-      const storedFileName: string = `${randomUUID()}${extension}`;
-      const storedPath: string = join(attachmentsDirectory, storedFileName);
+      for (const attachment of attachments) {
+        const extension: string = extname(attachment.originalName);
+        const storedFileName: string = `${randomUUID()}${extension}`;
+        const storedPath: string = join(attachmentsDirectory, storedFileName);
 
-      /*
-       * Copy instead of moving the multer temporary file.
-       * The route still needs the temporary path when it sends an image to Codex.
-       */
-      await copyFile(attachment.temporaryPath, storedPath);
+        /* Keep temporary files available while Codex processes the request. */
+        await copyFile(attachment.temporaryPath, storedPath);
 
-      message.attachments.push({
-        name: attachment.originalName,
-        mimeType: attachment.mimeType,
-        path: storedFileName,
-        ...(attachment.durationSeconds === undefined
-          ? {}
-          : { durationSeconds: attachment.durationSeconds }),
-      });
+        message.attachments.push({
+          name: attachment.originalName,
+          mimeType: attachment.mimeType,
+          path: storedFileName,
+          ...(attachment.durationSeconds === undefined
+            ? {}
+            : { durationSeconds: attachment.durationSeconds }),
+        });
+      }
     }
 
     if (role === "assistant") {

@@ -32,7 +32,7 @@ const EDIT_INSTRUCTION_LINES: readonly string[] = [
   "Do not rely on pre-existing generated files and do not apply edits on disk.",
 ];
 
-function createInput(prompt: string, imagePath?: string): Input {
+function createInput(prompt: string, imagePaths: string[] = []): Input {
   const userRequest: string =
     prompt.trim() !== ""
       ? prompt
@@ -41,7 +41,7 @@ function createInput(prompt: string, imagePath?: string): Input {
   const text: string =
     `${EDIT_INSTRUCTION_LINES.join(" ")}\n\nUser request:\n${userRequest}`;
 
-  if (imagePath === undefined) {
+  if (imagePaths.length === 0) {
     return text;
   }
 
@@ -50,10 +50,10 @@ function createInput(prompt: string, imagePath?: string): Input {
       type: "text",
       text,
     },
-    {
+    ...imagePaths.map((path: string) => ({
       type: "local_image",
-      path: imagePath,
-    },
+      path,
+    }) as const),
   ];
 }
 
@@ -76,7 +76,7 @@ export class CodexService {
     prompt: string,
     threadId?: string,
     onThreadStarted?: (id: string) => Promise<void>,
-    imagePath?: string,
+    imagePaths: string[] = [],
   ): Promise<string> {
     const codex: CodexClient = new this.CodexClient();
 
@@ -93,7 +93,7 @@ export class CodexService {
         : codex.resumeThread(threadId, options);
 
     const { events } = await thread.runStreamed(
-      createInput(prompt, imagePath),
+      createInput(prompt, imagePaths),
     );
 
     let finalResponse = "";

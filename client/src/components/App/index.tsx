@@ -249,20 +249,18 @@ export function App(): ReactElement {
 
   async function handleSubmit(
     submittedPrompt: string,
-    attachment: File | null,
+    attachments: File[],
   ): Promise<boolean> {
-    const optimisticAttachments: ChatMessageAttachment[] = [];
-
-    if (attachment !== null) {
+    const optimisticAttachments: ChatMessageAttachment[] = attachments.map((attachment: File) => {
       const previewUrl: string = URL.createObjectURL(attachment);
       optimisticAttachmentUrlsRef.current.add(previewUrl);
-      optimisticAttachments.push({
+      return {
         name: attachment.name,
         mimeType: attachment.type || "application/octet-stream",
         path: "",
         previewUrl,
-      });
-    }
+      };
+    });
 
     const nextTurn: AppendPromptTurnResult = appendPromptTurn(
       messages,
@@ -278,7 +276,7 @@ export function App(): ReactElement {
     setPrompt("");
 
     setSubmitError(null);
-    setIsUploadingAttachments(attachment !== null);
+    setIsUploadingAttachments(attachments.length > 0);
     setIsRunning(true);
 
     try {
@@ -293,7 +291,7 @@ export function App(): ReactElement {
       const result = await submitChatMessage(
         chat.id,
         submittedPrompt,
-        attachment,
+        attachments,
         fetch,
         () => setIsUploadingAttachments(false),
       );
@@ -535,11 +533,11 @@ export function App(): ReactElement {
               onPromptChange={setPrompt}
               onSubmit={(
                 submittedPrompt: string,
-                attachment: File | null,
+                attachments: File[],
               ) =>
                 handleSubmit(
                   submittedPrompt,
-                  attachment,
+                  attachments,
                 )
               }
             />

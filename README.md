@@ -8,7 +8,7 @@ The application is intended for local development and experimentation. The serve
 
 - Create, resume, rename, and delete persistent chats.
 - Continue conversations through Codex thread IDs.
-- Send text prompts and one attachment per message.
+- Send text prompts and up to five attachments per message.
 - Pass images directly to Codex and expose other uploaded files through a safe local path.
 - Record voice messages in the browser and transcribe them locally with FFmpeg and `whisper.cpp`.
 - Extract fenced code blocks from assistant responses and display them as navigable, syntax-highlighted resources.
@@ -258,7 +258,7 @@ Run these commands from the repository root:
 
 1. Open the web interface and enter a prompt.
 2. Press `Enter` to send or `Shift+Enter` to insert a new line.
-3. Use the attachment button to add one file. Images are passed to Codex as image input; other files are archived and made available to Codex through their local path.
+3. Use the attachment button to add up to five files. Images are passed to Codex as image input; other files are archived and made available to Codex through their local path.
 4. Use the microphone button to record a voice message. The browser recording is normalized by FFmpeg and transcribed locally before the transcript is sent to Codex.
 5. Open the chat-history panel to revisit, rename, or delete conversations.
 6. Open the resources panel to inspect and copy files extracted from assistant code blocks.

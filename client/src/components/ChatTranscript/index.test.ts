@@ -50,6 +50,26 @@ test("image attachments render an intrinsic-size-aware preview", () => {
   assert.match(markup, />landscape\.png<\/span>/);
 });
 
+test("a message renders every attached file", () => {
+  const markup = renderToStaticMarkup(createElement(ChatTranscript, {
+    chatId: "multi-chat",
+    messages: [{
+      id: "message-multi",
+      role: "user",
+      content: "Review these",
+      status: "complete",
+      attachments: [
+        { name: "first.txt", mimeType: "text/plain", path: "first.txt" },
+        { name: "second.pdf", mimeType: "application/pdf", path: "second.pdf" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /first\.txt/);
+  assert.match(markup, /second\.pdf/);
+  assert.equal((markup.match(/message-attachment-file/g) ?? []).length, 2);
+});
+
 test("resource loading settles to content or an error fallback", () => {
   assert.equal(getResourceLoadStatus("load"), "loaded");
   assert.equal(getResourceLoadStatus("error"), "error");

@@ -147,7 +147,7 @@ test("attachment upload changes Processing attachments to Thinking before applyi
   const submission = submitChatMessage(
     "chat-1",
     "Summarize this",
-    attachment,
+    [attachment],
     fetch,
     () => {
       isUploadingAttachments = false;
@@ -222,4 +222,25 @@ test("attachment upload changes Processing attachments to Thinking before applyi
   assert.match(completedMarkup, /The attachment contains notes\./);
   assert.doesNotMatch(completedMarkup, />Thinking</);
   assert.doesNotMatch(completedMarkup, />Processing attachments</);
+});
+
+test("submitChatMessage appends every attachment to multipart data", async () => {
+  let submittedBody: FormData | undefined;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    submittedBody = init?.body as FormData;
+    return new Response(JSON.stringify({
+      finalResponse: "ok",
+      chat: { id: "chat-1", title: "Chat", date: "2026-10-28", createdAt: "", updatedAt: "", messages: [], resources: [] },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  await submitChatMessage("chat-1", "Review", [
+    new File(["one"], "one.txt"),
+    new File(["two"], "two.txt"),
+  ], fetchImpl);
+
+  assert.deepEqual(
+    submittedBody?.getAll("attachments").map((value) => (value as File).name),
+    ["one.txt", "two.txt"],
+  );
 });

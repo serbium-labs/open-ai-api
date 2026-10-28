@@ -79,12 +79,12 @@ test("voice uploads are transcribed before Codex and archived with byte-accurate
       chatArchiveService: archive,
       chatId: chat.id,
       codexService: codex as unknown as CodexService,
-      file: uploadedFile(
+      files: [uploadedFile(
         uploadPath,
         "voice-message.webm",
         "audio/webm",
         audioBytes.length,
-      ),
+      )],
       prompt: "",
     });
 
@@ -149,12 +149,12 @@ test("a transcription failure is returned clearly and is not sent to Codex", asy
         chatArchiveService: archive,
         chatId: chat.id,
         codexService: codex as unknown as CodexService,
-        file: uploadedFile(
+        files: [uploadedFile(
           uploadPath,
           "voice.webm",
           "audio/webm",
           11,
-        ),
+        )],
         prompt: "",
       }),
       /local Whisper model not found/i,
@@ -194,12 +194,12 @@ test("ordinary file attachments bypass transcription and keep their existing Cod
       chatArchiveService: archive,
       chatId: chat.id,
       codexService: codex as unknown as CodexService,
-      file: uploadedFile(
+      files: [uploadedFile(
         uploadPath,
         "notes.txt",
         "text/plain",
         13,
-      ),
+      )],
       prompt: "Summarize this",
     });
 
@@ -210,6 +210,47 @@ test("ordinary file attachments bypass transcription and keep their existing Cod
       codex.prompts[0] ?? "",
       /Inspect this file when answering the user\./,
     );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("multiple attachments are archived and included in the Codex context", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-file-route-test-"));
+  const archive = new ChatArchiveService(directory);
+  const chat = await archive.createChat();
+  const firstPath = join(directory, "first-upload");
+  const secondPath = join(directory, "second-upload");
+  await writeFile(firstPath, "first");
+  await writeFile(secondPath, "second");
+  const codex: FakeCodex = {
+    prompts: [],
+    async run(prompt: string): Promise<string> {
+      this.prompts.push(prompt);
+      return "done";
+    },
+  };
+
+  try {
+    const result = await processChatMessage({
+      audioDurationReader: durationReader,
+      audioTranscriber: { async transcribe() { return ""; } },
+      chatArchiveService: archive,
+      chatId: chat.id,
+      codexService: codex as unknown as CodexService,
+      files: [
+        uploadedFile(firstPath, "first.txt", "text/plain", 5),
+        uploadedFile(secondPath, "second.pdf", "application/pdf", 6),
+      ],
+      prompt: "Compare these",
+    });
+
+    assert.deepEqual(
+      result.chat.messages[0]?.attachments.map(({ name }) => name),
+      ["first.txt", "second.pdf"],
+    );
+    assert.match(codex.prompts[0] ?? "", /Name: first\.txt/);
+    assert.match(codex.prompts[0] ?? "", /Name: second\.pdf/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

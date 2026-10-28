@@ -2,11 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ATTACHMENT_LIMIT_ERROR,
+  addAttachments,
   createRecordedAudioFile,
   detectRecordedAudioFormat,
   runComposerSubmission,
   selectRecorderMimeType,
 } from "./index";
+
+test("uses a clear error when the attachment limit is reached", () => {
+  assert.equal(ATTACHMENT_LIMIT_ERROR, "Attachment limit reached");
+});
+
+test("addAttachments caps the selection at five and reports the limit", () => {
+  const existing = [0, 1, 2, 3].map((index) => new File([String(index)], `${index}.txt`));
+  const result = addAttachments(existing, [
+    new File(["four"], "4.txt"),
+    new File(["five"], "5.txt"),
+  ]);
+
+  assert.equal(result.attachments.length, 5);
+  assert.equal(result.attachments[4]?.name, "4.txt");
+  assert.match(result.error, /up to 5 files/i);
+});
 
 test("selectRecorderMimeType chooses the first format the browser can encode", () => {
   assert.equal(
@@ -81,7 +99,7 @@ test("voice submission clears immediately and ignores a duplicate while pending"
   const options = {
     lock,
     prompt: "",
-    attachment,
+    attachments: [attachment],
     onSubmit: async (): Promise<boolean> => {
       submitCount += 1;
       events.push("submit");
@@ -129,9 +147,9 @@ test("failed voice submission restores the recording for retry", async () => {
   const submission = runComposerSubmission({
     lock,
     prompt: "",
-    attachment: new File(["voice"], "voice.webm", {
+    attachments: [new File(["voice"], "voice.webm", {
       type: "audio/webm",
-    }),
+    })],
     onSubmit: async (): Promise<boolean> => {
       await pending.promise;
       return true;
@@ -162,9 +180,9 @@ test("a false submission result restores the recording for retry", async () => {
   await runComposerSubmission({
     lock,
     prompt: "",
-    attachment: new File(["voice"], "voice.webm", {
+    attachments: [new File(["voice"], "voice.webm", {
       type: "audio/webm",
-    }),
+    })],
     onSubmit: async () => false,
     onStart: () => events.push("clear-preview"),
     onSuccess: () => events.push("success"),
