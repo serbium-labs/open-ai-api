@@ -9,7 +9,7 @@ import {
   type ChatMessage,
   type ChatMessageAttachment,
 } from "@components/ChatTranscript";
-import { CodeFiles } from "@components/CodeFiles";
+import { CodeFiles, combineResources, type DisplayResource } from "@components/CodeFiles";
 import { PromptForm } from "@components/PromptForm";
 import {
   resolveResourceNavigation,
@@ -77,7 +77,15 @@ export function App(): ReactElement {
   const [conversationState, setConversationState] = useState<ConversationState>(createFreshConversationState);
   const [chatSummaries, setChatSummaries] = useState<ChatSummary[]>([]);
   const { codeStatus, currentChatId, files, messages } = conversationState;
+  const displayResources: DisplayResource[] = combineResources(files, messages, currentChatId);
+  const resourcesStatus: string = codeStatus === UI_TEXT.loadingCode
+    ? codeStatus
+    : displayResources.length === 0
+      ? UI_TEXT.emptyResources
+      : `${displayResources.length} resource${displayResources.length === 1 ? "" : "s"}`;
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] =
+    useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sidebarState, dispatchSidebarAction] = useReducer(
     reduceSidebarState,
@@ -241,48 +249,34 @@ export function App(): ReactElement {
 
   async function handleSubmit(
     submittedPrompt: string,
-    attachment: File | null,
+    attachments: File[],
   ): Promise<boolean> {
-    const optimisticAttachments: ChatMessageAttachment[] = [];
-    const isVoiceAttachment: boolean =
-      attachment?.type.toLowerCase().startsWith("audio/") ?? false;
-
-    if (attachment !== null && isVoiceAttachment) {
+    const optimisticAttachments: ChatMessageAttachment[] = attachments.map((attachment: File) => {
       const previewUrl: string = URL.createObjectURL(attachment);
       optimisticAttachmentUrlsRef.current.add(previewUrl);
-      optimisticAttachments.push({
+      return {
         name: attachment.name,
         mimeType: attachment.type || "application/octet-stream",
         path: "",
         previewUrl,
-      });
-    }
+      };
+    });
 
-    const nextTurn: AppendPromptTurnResult | null =
-      attachment === null || isVoiceAttachment
-        ? appendPromptTurn(
-            messages,
-            submittedPrompt,
-            optimisticAttachments,
-          )
-        : null;
+    const nextTurn: AppendPromptTurnResult = appendPromptTurn(
+      messages,
+      submittedPrompt,
+      optimisticAttachments,
+    );
 
-    if (nextTurn !== null) {
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        messages: nextTurn.messages,
-        codeStatus: UI_TEXT.loadingCode,
-      }));
-      setPrompt("");
-    }
+    setConversationState((currentState: ConversationState) => ({
+      ...currentState,
+      messages: nextTurn.messages,
+      codeStatus: UI_TEXT.loadingCode,
+    }));
+    setPrompt("");
 
     setSubmitError(null);
-    if (nextTurn === null) {
-      setConversationState((currentState: ConversationState) => ({
-        ...currentState,
-        codeStatus: UI_TEXT.loadingCode,
-      }));
-    }
+    setIsUploadingAttachments(attachments.length > 0);
     setIsRunning(true);
 
     try {
@@ -294,7 +288,13 @@ export function App(): ReactElement {
         ...currentState,
         currentChatId: chat.id,
       }));
-      const result = await submitChatMessage(chat.id, submittedPrompt, attachment);
+      const result = await submitChatMessage(
+        chat.id,
+        submittedPrompt,
+        attachments,
+        fetch,
+        () => setIsUploadingAttachments(false),
+      );
 
       setChatSummaries((summaries: ChatSummary[]) => sortedSummariesWith(result.chat, summaries));
       setConversationState(conversationStateFromChat(result.chat));
@@ -305,16 +305,16 @@ export function App(): ReactElement {
 
       setConversationState((currentState: ConversationState) => ({
         ...currentState,
-        messages: nextTurn === null
-          ? currentState.messages
-          : failAssistantMessage(currentState.messages, nextTurn.assistantMessageId, message),
+        messages: failAssistantMessage(
+          currentState.messages,
+          nextTurn.assistantMessageId,
+          message,
+        ),
         codeStatus: getCodeStatus(currentState.files),
       }));
-      if (nextTurn === null) {
-        setSubmitError(message);
-      }
       return false;
     } finally {
+      setIsUploadingAttachments(false);
       setIsRunning(false);
     }
   }
@@ -357,7 +357,7 @@ export function App(): ReactElement {
   function handleResourceNavigate(resourceId: string): void {
     resourceNavigationRequestId.current += 1;
     setResourceNavigationTarget(
-      resolveResourceNavigation(files, resourceId, resourceNavigationRequestId.current),
+      resolveResourceNavigation(displayResources, resourceId, resourceNavigationRequestId.current),
     );
   }
 
@@ -522,6 +522,7 @@ export function App(): ReactElement {
             <ChatTranscript
               messages={messages}
               chatId={currentChatId}
+              isUploadingAttachments={isUploadingAttachments}
               resourceNavigationTarget={resourceNavigationTarget}
             />
             <PromptForm
@@ -532,11 +533,11 @@ export function App(): ReactElement {
               onPromptChange={setPrompt}
               onSubmit={(
                 submittedPrompt: string,
-                attachment: File | null,
+                attachments: File[],
               ) =>
                 handleSubmit(
                   submittedPrompt,
-                  attachment,
+                  attachments,
                 )
               }
             />
@@ -584,8 +585,8 @@ export function App(): ReactElement {
       {isResourcesOpen ? (
         <aside className="resources-sidebar" aria-label="Chat resources">
           <CodeFiles
-            files={files}
-            status={codeStatus}
+            files={displayResources}
+            status={resourcesStatus}
             onResourceNavigate={handleResourceNavigate}
           />
         </aside>

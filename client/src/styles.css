@@ -391,6 +391,9 @@ h1 {
   gap: 10px;
   width: 100%;
 }
+.prompt-input-row-recording {
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+}
 textarea {
   min-height: 44px;
   max-height: 180px;
@@ -470,7 +473,7 @@ input[type="range"]:focus-visible {
   color: var(--color-text);
 }
 .attachment-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
 }
 .recording-stop-button {
   border-color: var(--color-error-border);
@@ -480,6 +483,16 @@ input[type="range"]:focus-visible {
 
 .recording-stop-button:hover:not(:disabled) {
   background: #ffe5e5;
+  color: #a91f1f;
+}
+
+.recording-cancel-button {
+  border-color: var(--color-error-border);
+  color: #a91f1f;
+}
+
+.recording-cancel-button:hover:not(:disabled) {
+  background: var(--color-error-surface);
   color: #a91f1f;
 }
 
@@ -496,6 +509,15 @@ input[type="range"]:focus-visible {
   padding: 8px 10px;
   background: var(--color-surface-muted);
   color: var(--color-text);
+}
+.attachment-list {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachment-list .attachment-preview {
+  margin-bottom: 0;
 }
 .attachment-icon {
   flex: 0 0 auto;
@@ -879,8 +901,16 @@ input[type="range"]:focus-visible {
   white-space: nowrap;
 }
 
-.message-code figcaption .copy-button {
+.message-code figcaption .copy-button,
+.code-file-actions {
   flex: 0 0 auto;
+}
+
+.code-file-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
 }
 
 .code-language-label {
@@ -930,6 +960,8 @@ input[type="range"]:focus-visible {
   padding: 8px 10px 8px 12px;
 }
 .code-file-link {
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   border: 0;
   border-radius: 6px;
@@ -951,8 +983,68 @@ input[type="range"]:focus-visible {
   outline-offset: 2px;
 }
 
+.download-button {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  line-height: 0;
+}
+
+.download-button:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.download-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+}
+
 .code-file h3 {
+  flex: 1 1 auto;
   font-size: 15px;
+}
+
+.attachment-resource-preview {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: var(--color-surface-muted);
+}
+
+.attachment-resource-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.attachment-resource-audio,
+.attachment-resource-file {
+  padding: 12px;
+}
+
+.attachment-resource-audio audio {
+  display: block;
+  width: 100%;
+}
+
+.attachment-resource-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 
 pre {

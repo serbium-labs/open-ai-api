@@ -18,6 +18,7 @@ export const UI_TEXT = {
   hideResourcesTooltip: "Close resources panel",
   loadingCode: "Loading generated code...",
   emptyCode: "No generated code blocks yet.",
+  emptyResources: "No resources yet.",
   runButton: "Run Codex",
   emptyPromptTooltip: "Enter a message",
   running: "Running...",

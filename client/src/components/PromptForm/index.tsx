@@ -21,6 +21,22 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+export const MAX_ATTACHMENTS = 5;
+export const ATTACHMENT_LIMIT_ERROR = "Attachment limit reached";
+
+export function addAttachments(current: File[], selected: File[]): {
+  attachments: File[];
+  error: string;
+} {
+  const availableSlots = MAX_ATTACHMENTS - current.length;
+  return {
+    attachments: [...current, ...selected.slice(0, availableSlots)],
+    error: selected.length > availableSlots
+      ? `You can attach up to ${MAX_ATTACHMENTS} files.`
+      : "",
+  };
+}
+
 export type PromptFormProps = {
   prompt: string;
   isRunning: boolean;
@@ -28,7 +44,7 @@ export type PromptFormProps = {
   onPromptChange: (prompt: string) => void;
   onSubmit: (
     prompt: string,
-    attachment: File | null,
+    attachments: File[],
   ) => Promise<boolean>;
 };
 
@@ -36,10 +52,36 @@ type SubmissionLock = {
   current: boolean;
 };
 
+type SubmitAvailability = {
+  isRunning: boolean;
+  isSubmitting: boolean;
+  isRecording: boolean;
+  isRequestingMicrophone: boolean;
+  isFinalizingRecording: boolean;
+  isPromptEmpty: boolean;
+  hasAttachment: boolean;
+};
+
+export function isComposerSubmitDisabled({
+  isRunning,
+  isSubmitting,
+  isRecording,
+  isRequestingMicrophone,
+  isFinalizingRecording,
+  isPromptEmpty,
+  hasAttachment,
+}: SubmitAvailability): boolean {
+  return isRunning ||
+    isSubmitting ||
+    isRequestingMicrophone ||
+    isFinalizingRecording ||
+    (isPromptEmpty && !hasAttachment && !isRecording);
+}
+
 type RunSubmissionOptions = {
   lock: SubmissionLock;
   prompt: string;
-  attachment: File | null;
+  attachments: File[];
   onSubmit: PromptFormProps["onSubmit"];
   onStart: () => void;
   onSuccess: () => void;
@@ -50,7 +92,7 @@ type RunSubmissionOptions = {
 export async function runComposerSubmission({
   lock,
   prompt,
-  attachment,
+  attachments,
   onSubmit,
   onStart,
   onSuccess,
@@ -65,7 +107,7 @@ export async function runComposerSubmission({
   onStart();
 
   try {
-    const wasSent: boolean = await onSubmit(prompt, attachment);
+    const wasSent: boolean = await onSubmit(prompt, attachments);
 
     if (wasSent) {
       onSuccess();
@@ -288,8 +330,10 @@ export function PromptForm({
 
   const isSubmittingRef = useRef<boolean>(false);
 
-  const [attachment, setAttachment] =
-    useState<File | null>(null);
+  const submitRecordingOnStopRef = useRef<boolean>(false);
+
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string>("");
 
   const [isRecording, setIsRecording] =
     useState<boolean>(false);
@@ -319,15 +363,21 @@ export function PromptForm({
     prompt.trim() === "";
 
   const hasAttachment: boolean =
-    attachment !== null;
+    attachments.length > 0;
+  const isAttachmentLimitReached = attachments.length >= MAX_ATTACHMENTS;
+  const attachmentTooltip = isAttachmentLimitReached
+    ? "Attachment limit reached"
+    : `Attach files (${attachments.length}/${MAX_ATTACHMENTS})`;
 
-  const isSubmitDisabled: boolean =
-    isRunning ||
-    isSubmitting ||
-    isRecording ||
-    isRequestingMicrophone ||
-    isFinalizingRecording ||
-    (isPromptEmpty && !hasAttachment);
+  const isSubmitDisabled: boolean = isComposerSubmitDisabled({
+    isRunning,
+    isSubmitting,
+    isRecording,
+    isRequestingMicrophone,
+    isFinalizingRecording,
+    isPromptEmpty,
+    hasAttachment,
+  });
 
   const submitTooltip: string = isRunning || isSubmitting
     ? hasAttachment
@@ -335,8 +385,10 @@ export function PromptForm({
       : UI_TEXT.running
     : isFinalizingRecording
       ? "Preparing voice recording..."
-      : isRecording || isRequestingMicrophone
-        ? "Stop recording before sending"
+      : isRecording
+        ? "Send voice message"
+      : isRequestingMicrophone
+        ? "Waiting for microphone access"
       : isPromptEmpty && !hasAttachment
         ? UI_TEXT.emptyPromptTooltip
         : UI_TEXT.runButton;
@@ -423,21 +475,37 @@ export function PromptForm({
   function handleAttachmentChange(
     event: ChangeEvent<HTMLInputElement>,
   ): void {
-    const file: File | undefined =
-      event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (selectedFiles.length === 0) {
+      return;
+    }
+    clearAudioPreview();
+    setRecordingError("");
+    setAttachments((current: File[]) => {
+      const result = addAttachments(current, selectedFiles);
+      setAttachmentError(result.error);
+      return result.attachments;
+    });
+    event.target.value = "";
+  }
 
-    if (file === undefined) {
+  function handleAttachmentButton(): void {
+    if (isAttachmentLimitReached) {
+      setAttachmentError(ATTACHMENT_LIMIT_ERROR);
       return;
     }
 
-    clearAudioPreview();
-    setRecordingError("");
-    setAttachment(file);
+    fileInputRef.current?.click();
   }
 
-  function removeAttachment(): void {
-    clearAudioPreview();
-    setAttachment(null);
+  function removeAttachment(index: number): void {
+    const removed = attachments[index];
+    if (removed === undefined) return;
+    if (audioPreviewUrlRef.current !== null && removed.type.startsWith("audio/")) {
+      clearAudioPreview();
+    }
+    setAttachments((current: File[]) => current.filter((_, fileIndex) => fileIndex !== index));
+    setAttachmentError("");
     setRecordingError("");
 
     if (fileInputRef.current !== null) {
@@ -494,6 +562,7 @@ export function PromptForm({
 
       recorder.onerror = () => {
         recorder.onstop = null;
+        submitRecordingOnStopRef.current = false;
         stopMediaStream(stream);
         mediaRecorderRef.current = null;
         audioChunksRef.current = [];
@@ -506,6 +575,9 @@ export function PromptForm({
       };
 
       recorder.onstop = () => {
+        const shouldSubmit: boolean =
+          submitRecordingOnStopRef.current;
+        submitRecordingOnStopRef.current = false;
         const chunks: Blob[] = audioChunksRef.current;
         audioChunksRef.current = [];
         stopMediaStream(stream);
@@ -534,7 +606,30 @@ export function PromptForm({
 
             const previewUrl: string = URL.createObjectURL(blob);
             audioPreviewUrlRef.current = previewUrl;
-            setAttachment(file);
+            const finalizedAttachments: File[] = [...attachments, file];
+
+            if (shouldSubmit) {
+              setAttachmentError("");
+              setAudioPreviewUrl(previewUrl);
+              void submitFinalizedMessage(
+                finalizedAttachments,
+                previewUrl,
+                [],
+              );
+              return;
+            }
+
+            setAttachments((current: File[]) => {
+              if (current.length >= MAX_ATTACHMENTS) {
+                setAttachmentError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+                URL.revokeObjectURL(previewUrl);
+                audioPreviewUrlRef.current = null;
+                setAudioPreviewUrl(null);
+                return current;
+              }
+              setAttachmentError("");
+              return [...current, file];
+            });
             setAudioPreviewUrl(previewUrl);
 
             void createWaveform(blob)
@@ -603,44 +698,72 @@ export function PromptForm({
     setIsFinalizingRecording(true);
   }
 
+  function cancelRecording(): void {
+    const recorder: MediaRecorder | null =
+      mediaRecorderRef.current;
+    const stream: MediaStream | null =
+      mediaStreamRef.current;
+
+    if (recorder !== null) {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.onerror = null;
+
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    }
+
+    audioChunksRef.current = [];
+    submitRecordingOnStopRef.current = false;
+    mediaRecorderRef.current = null;
+    stopMediaStream(stream);
+    setIsRecording(false);
+    setIsFinalizingRecording(false);
+    setRecordingElapsed(0);
+    setRecordingError("");
+  }
+
   function handleRecordButton(): void {
     if (isRecording) {
       stopRecording();
       return;
     }
 
-    void startRecording();
-  }
-
-  async function submitMessage(): Promise<void> {
-    if (isSubmitDisabled || isSubmittingRef.current) {
+    if (isAttachmentLimitReached) {
+      setAttachmentError(ATTACHMENT_LIMIT_ERROR);
       return;
     }
 
-    const submittedAttachment: File | null = attachment;
-    const submittedAudioPreviewUrl: string | null =
-      audioPreviewUrlRef.current;
-    const submittedWaveform: number[] = waveform;
+    void startRecording();
+  }
+
+  async function submitFinalizedMessage(
+    submittedAttachments: File[],
+    submittedAudioPreviewUrl: string | null,
+    submittedWaveform: number[],
+  ): Promise<void> {
     const isVoiceSubmission: boolean =
       submittedAudioPreviewUrl !== null;
 
     await runComposerSubmission({
       lock: isSubmittingRef,
       prompt,
-      attachment: submittedAttachment,
+      attachments: submittedAttachments,
       onSubmit,
       onStart: () => {
         setIsSubmitting(true);
         setRecordingError("");
+        setAttachments([]);
+        setAttachmentError("");
 
         if (isVoiceSubmission) {
-          setAttachment(null);
           audioPreviewUrlRef.current = null;
           setAudioPreviewUrl(null);
           setWaveform([]);
         }
 
-        if (isVoiceSubmission && fileInputRef.current !== null) {
+        if (fileInputRef.current !== null) {
           fileInputRef.current.value = "";
         }
       },
@@ -649,7 +772,7 @@ export function PromptForm({
           URL.revokeObjectURL(submittedAudioPreviewUrl);
         }
 
-        setAttachment(null);
+        setAttachments([]);
         setRecordingError("");
 
         if (fileInputRef.current !== null) {
@@ -657,10 +780,6 @@ export function PromptForm({
         }
       },
       onFailure: () => {
-        if (!isVoiceSubmission) {
-          return;
-        }
-
         if (!isMountedRef.current) {
           if (submittedAudioPreviewUrl !== null) {
             URL.revokeObjectURL(submittedAudioPreviewUrl);
@@ -669,13 +788,16 @@ export function PromptForm({
           return;
         }
 
-        setAttachment(submittedAttachment);
-        audioPreviewUrlRef.current = submittedAudioPreviewUrl;
-        setAudioPreviewUrl(submittedAudioPreviewUrl);
-        setWaveform(submittedWaveform);
-        setRecordingError(
-          "Voice message failed to send. Your recording was restored. Please try again.",
-        );
+        setAttachments(submittedAttachments);
+
+        if (isVoiceSubmission) {
+          audioPreviewUrlRef.current = submittedAudioPreviewUrl;
+          setAudioPreviewUrl(submittedAudioPreviewUrl);
+          setWaveform(submittedWaveform);
+          setRecordingError(
+            "Voice message failed to send. Your recording was restored. Please try again.",
+          );
+        }
       },
       onFinish: () => {
         if (isMountedRef.current) {
@@ -683,6 +805,24 @@ export function PromptForm({
         }
       },
     });
+  }
+
+  async function submitMessage(): Promise<void> {
+    if (isRecording) {
+      submitRecordingOnStopRef.current = true;
+      stopRecording();
+      return;
+    }
+
+    if (isSubmitDisabled || isSubmittingRef.current) {
+      return;
+    }
+
+    await submitFinalizedMessage(
+      attachments,
+      audioPreviewUrlRef.current,
+      waveform,
+    );
   }
 
   function handleSubmit(
@@ -712,8 +852,10 @@ export function PromptForm({
       onSubmit={handleSubmit}
     >
       <div className="prompt-composer">
-        {attachment !== null && (
-          <div className="attachment-preview">
+        {attachments.length > 0 && (
+          <div className="attachment-list">
+          {attachments.map((attachment: File, index: number) => (
+          <div className="attachment-preview" key={`${attachment.name}-${attachment.lastModified}-${index}`}>
             <span className="attachment-icon" aria-hidden="true">
               {(() => {
                 const Icon = getFileIcon(attachment);
@@ -721,7 +863,7 @@ export function PromptForm({
               })()}
             </span>
 
-            {audioPreviewUrl !== null ? (
+            {audioPreviewUrl !== null && attachment.type.startsWith("audio/") ? (
               <div className="voice-preview">
                 <AudioPlayer
                   src={audioPreviewUrl}
@@ -744,16 +886,20 @@ export function PromptForm({
               <button
                 className="attachment-remove-button icon-tooltip"
                 type="button"
-                aria-label="Remove attachment"
+                aria-label={`Remove ${attachment.name}`}
                 data-tooltip="Remove attachment"
                 data-tooltip-placement="top"
-                onClick={removeAttachment}
+                onClick={() => removeAttachment(index)}
               >
                 <Icon name="remove" />
               </button>
             )}
           </div>
+          ))}
+          </div>
         )}
+
+        {attachmentError !== "" && <p className="recording-error" role="alert">{attachmentError}</p>}
 
         {recordingError !== "" && (
           <span className="recording-error" role="alert">
@@ -767,11 +913,16 @@ export function PromptForm({
           </p>
         )}
 
-        <div className="prompt-input-row">
+        <div
+          className={`prompt-input-row${
+            isRecording ? " prompt-input-row-recording" : ""
+          }`}
+        >
           <input
             ref={fileInputRef}
             className="attachment-input"
             type="file"
+            multiple
             aria-label="Attach file"
             disabled={
               isRunning ||
@@ -792,9 +943,9 @@ export function PromptForm({
               isFinalizingRecording
             }
             aria-label="Attach file"
-            data-tooltip="Attach file"
+            data-tooltip={attachmentTooltip}
             data-tooltip-placement="top"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleAttachmentButton}
           >
             <Paperclip size={20} strokeWidth={1.75} aria-hidden="true" />
           </button>
@@ -814,6 +965,8 @@ export function PromptForm({
                 ? "Stop voice recording"
                 : isRequestingMicrophone
                   ? "Requesting microphone access"
+                  : isAttachmentLimitReached
+                    ? "Attachment limit reached"
                 : "Record voice message"
             }
             data-tooltip={
@@ -828,6 +981,19 @@ export function PromptForm({
           >
             <Icon name={isRecording ? "stop" : "microphone"} />
           </button>
+
+          {isRecording && (
+            <button
+              className="attachment-button recording-cancel-button icon-tooltip"
+              type="button"
+              aria-label="Cancel voice recording"
+              data-tooltip="Cancel recording"
+              data-tooltip-placement="top"
+              onClick={cancelRecording}
+            >
+              <Icon name="remove" />
+            </button>
+          )}
 
           {isRecording ? (
             <div
