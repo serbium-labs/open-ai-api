@@ -76,6 +76,7 @@ export type ChatTranscriptProps = {
 
   messages: ChatMessage[];
   chatId: string | undefined;
+  isUploadingAttachments?: boolean;
   resourceNavigationTarget?: ResourceNavigationTarget;
 };
 
@@ -726,13 +727,21 @@ function attachmentRenderKey(
   return `${messageId}-attachment-${index}-${resourceIdentity}`;
 }
 
-function ThinkingIndicator(): ReactElement {
+function ThinkingIndicator({
+  isUploadingAttachments = false,
+}: {
+  isUploadingAttachments?: boolean;
+}): ReactElement {
+
+  const status: string = isUploadingAttachments
+    ? "Processing attachments"
+    : "Thinking";
 
   return (
 
-    <div className="thinking-indicator" aria-label="Model is thinking">
+    <div className="thinking-indicator" aria-label={status}>
 
-      <span>Thinking</span>
+      <span>{status}</span>
 
       <span className="thinking-dots" aria-hidden="true">
 
@@ -748,29 +757,6 @@ function ThinkingIndicator(): ReactElement {
 
   );
 
-}
-
-function ProcessingAudioIndicator(): ReactElement {
-  return (
-    <div className="thinking-indicator" role="status">
-      Processing audio...
-    </div>
-  );
-}
-
-function isPendingVoiceTurn(
-  messages: ChatMessage[],
-  messageIndex: number,
-): boolean {
-  const message: ChatMessage | undefined = messages[messageIndex];
-  const nextMessage: ChatMessage | undefined = messages[messageIndex + 1];
-
-  return (
-    message?.role === "user" &&
-    message.attachments.some(({ mimeType }) => mimeType.startsWith("audio/")) &&
-    nextMessage?.role === "assistant" &&
-    nextMessage.status === "pending"
-  );
 }
 
 function EmptyChatArt(): ReactElement {
@@ -801,7 +787,12 @@ function EmptyChatArt(): ReactElement {
 
 }
 
-export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: ChatTranscriptProps): ReactElement {
+export function ChatTranscript({
+  messages,
+  chatId,
+  isUploadingAttachments = false,
+  resourceNavigationTarget,
+}: ChatTranscriptProps): ReactElement {
   const transcriptRef = useRef<HTMLElement>(null);
   const messageRefs = useRef<Map<string, HTMLElement>>(new Map());
   const highlightTimerRef = useRef<number | undefined>(undefined);
@@ -894,18 +885,7 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
       {messages.length === 0 ? <EmptyChatArt /> : null}
 
-      {messages.map((message: ChatMessage, messageIndex: number) => {
-        const isVoiceProcessing: boolean = isPendingVoiceTurn(
-          messages,
-          messageIndex,
-        );
-        const followsProcessingVoice: boolean =
-          message.role === "assistant" &&
-          message.status === "pending" &&
-          messageIndex > 0 &&
-          isPendingVoiceTurn(messages, messageIndex - 1);
-
-        return (
+      {messages.map((message: ChatMessage) => (
 
         <article
           className={`chat-message chat-message-${message.role} chat-message-${message.status}${
@@ -922,7 +902,7 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
           }}
         >
 
-          {followsProcessingVoice ? null : <div className="message-content">
+          <div className="message-content">
 
             {message.attachments.length > 0 ? (
               <div className="message-attachments">
@@ -942,11 +922,11 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
               </div>
             ) : null}
 
-            {isVoiceProcessing ? <ProcessingAudioIndicator /> : null}
-
             {message.status === "pending" ? (
 
-              <ThinkingIndicator />
+              <ThinkingIndicator
+                isUploadingAttachments={isUploadingAttachments}
+              />
 
             ) : message.content.trim() !== "" ? (
 
@@ -954,12 +934,11 @@ export function ChatTranscript({ messages, chatId, resourceNavigationTarget }: C
 
             ) : null}
 
-          </div>}
+          </div>
 
         </article>
 
-        );
-      })}
+      ))}
       <div className="chat-scroll-anchor" aria-hidden="true" />
     </section>
 
