@@ -152,7 +152,7 @@ export async function processChatMessage({
     codexContext = context.trim() === "" ? attachmentInstruction : `${context}\n\n${attachmentInstruction}`;
   }
 
-  const finalResponse = await codexService.run(
+  const codexResult = await codexService.run(
     codexContext,
     previousChat.codexThreadId,
     (id) =>
@@ -160,10 +160,16 @@ export async function processChatMessage({
     imagePaths,
   );
 
+  const { finalResponse, attachments: outputAttachments } =
+    typeof codexResult === "string"
+      ? { finalResponse: codexResult, attachments: [] }
+      : codexResult;
+
   const chat = await chatArchiveService.appendMessage(
     previousChat.id,
     "assistant",
     finalResponse,
+    outputAttachments,
   );
 
   return { chat, finalResponse };

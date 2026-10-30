@@ -11,6 +11,7 @@ import {
 } from "./index";
 import { ChatArchiveService } from "#services/chat-archive";
 import { CodexService } from "#services/codex";
+import type { CodexRunResult } from "#services/codex";
 import type { AudioTranscriber } from "#services/audio-transcription";
 import type { AudioDurationReader } from "#services/audio-duration";
 
@@ -31,7 +32,7 @@ test("attachment audio MIME types are explicit and case-insensitive", () => {
 
 type FakeCodex = {
   prompts: string[];
-  run(prompt: string): Promise<string>;
+  run(prompt: string): Promise<string | CodexRunResult>;
 };
 
 function uploadedFile(
@@ -251,6 +252,51 @@ test("multiple attachments are archived and included in the Codex context", asyn
     );
     assert.match(codex.prompts[0] ?? "", /Name: first\.txt/);
     assert.match(codex.prompts[0] ?? "", /Name: second\.pdf/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("generated model images are archived on the assistant message", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "model-image-route-test-"));
+  const archive = new ChatArchiveService(directory);
+  const chat = await archive.createChat();
+  const imageBytes = Buffer.from("edited photo bytes");
+  const codex: FakeCodex = {
+    prompts: [],
+    async run(prompt: string): Promise<CodexRunResult> {
+      this.prompts.push(prompt);
+      return {
+        finalResponse: "Here is the edited photo.",
+        attachments: [{
+          originalName: "edited-photo.png",
+          mimeType: "image/png",
+          data: imageBytes,
+        }],
+      };
+    },
+  };
+
+  try {
+    const result = await processChatMessage({
+      audioDurationReader: durationReader,
+      audioTranscriber: { async transcribe() { return ""; } },
+      chatArchiveService: archive,
+      chatId: chat.id,
+      codexService: codex as unknown as CodexService,
+      files: [],
+      prompt: "Edit my photo",
+    });
+    const assistantMessage = result.chat.messages[1];
+    const attachment = assistantMessage?.attachments[0];
+
+    assert.equal(assistantMessage?.role, "assistant");
+    assert.equal(attachment?.name, "edited-photo.png");
+    assert.equal(attachment?.mimeType, "image/png");
+    assert.deepEqual(
+      await readFile(await archive.getAttachmentPath(chat.id, attachment?.path ?? "")),
+      imageBytes,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

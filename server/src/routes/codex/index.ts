@@ -27,7 +27,7 @@ export function createCodexRouter(
           return;
         }
 
-        const finalResponse: string = await codexService.run(prompt);
+        const { finalResponse } = await codexService.run(prompt);
         await responseStorage.save(finalResponse);
         await outputCodeService.saveResponseChunks(finalResponse);
         response.status(HTTP_STATUS.ok).json({ finalResponse });
