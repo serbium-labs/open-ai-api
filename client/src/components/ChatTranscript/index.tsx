@@ -292,6 +292,36 @@ export function failAssistantMessage(
 
 }
 
+export function clearFailedMessages(messages: ChatMessage[]): ChatMessage[] {
+
+  return messages.filter((message: ChatMessage) => message.status !== "error");
+
+}
+
+export function getDisplayErrorMessage(
+
+  error: unknown,
+
+  fallback: string,
+
+): string {
+
+  const message: string = error instanceof Error ? error.message : fallback;
+
+  if (!/<(?:html|style)\b/i.test(message)) {
+
+    return message;
+
+  }
+
+  return /(?:403|forbidden|authentication|unauthori[sz]ed)/i.test(message)
+
+    ? "Authentication failed. Please check your Codex login."
+
+    : "Server error. Please try again.";
+
+}
+
 function renderText(text: string, key: string): ReactNode {
 
   const blocks: string[] = text.split(/\n{2,}/).map((block: string) => block.trim()).filter(Boolean);
