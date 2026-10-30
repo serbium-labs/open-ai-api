@@ -201,15 +201,6 @@
   left: auto;
 }
 
-/* Keep the first chat actions' top tooltips inside their scrolling container. */
-.chat-history-list {
-  row-gap: calc(var(--tooltip-line-height) + 2 * var(--tooltip-padding-block) + 2px);
-  padding-block-start: calc(
-    var(--tooltip-line-height) + 2 * var(--tooltip-padding-block) + var(--tooltip-trigger-gap) +
-      var(--tooltip-arrow-size) - var(--tooltip-arrow-overlap)
-  );
-}
-
 @media (prefers-reduced-motion: reduce) {
   :where([data-tooltip]) {
     --tooltip-motion-distance: 0px;

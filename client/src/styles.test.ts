@@ -18,3 +18,16 @@ test("keeps the active prompt above messages with an opaque boundary", async () 
     /\.chat-transcript\s*{[^}]*z-index:/s,
   );
 });
+
+test("keeps comfortable spacing between chat history cards", async () => {
+  const stylesheet = await readFile(new URL("./styles.css", import.meta.url), "utf8");
+
+  assert.match(
+    stylesheet,
+    /\.chat-history-list\s*{[^}]*gap: 6px;/s,
+  );
+  assert.match(
+    stylesheet,
+    /\.chat-history-item\s*{[^}]*padding: 8px 9px;/s,
+  );
+});
