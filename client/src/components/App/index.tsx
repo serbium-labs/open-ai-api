@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
+import { Check, MoreVertical, X } from "lucide-react";
 
 import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
 import {
@@ -103,10 +104,14 @@ export function App(): ReactElement {
   );
   const [chatListStatus, setChatListStatus] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | undefined>(undefined);
+  const [editingChatId, setEditingChatId] = useState<string | undefined>(undefined);
+  const [renameDraft, setRenameDraft] = useState<string>("");
+  const [renamingChatId, setRenamingChatId] = useState<string | undefined>(undefined);
+  const [openChatMenuId, setOpenChatMenuId] = useState<string | undefined>(undefined);
   const [resourceNavigationTarget, setResourceNavigationTarget] = useState<ResourceNavigationTarget | undefined>();
   const resourceNavigationRequestId = useRef<number>(0);
   const openChatRequestId = useRef<number>(0);
-  const isBusy: boolean = isRunning || deletingChatId !== undefined;
+  const isBusy: boolean = isRunning || deletingChatId !== undefined || renamingChatId !== undefined;
 
   useEffect(() => {
     const mobileMediaQuery: MediaQueryList = window.matchMedia(MOBILE_MEDIA_QUERY);
@@ -125,6 +130,31 @@ export function App(): ReactElement {
   useEffect(() => {
     saveSidebarPreferences(getLocalStorage(), sidebarState.preferences);
   }, [sidebarState.preferences]);
+
+  useEffect(() => {
+    if (openChatMenuId === undefined) {
+      return;
+    }
+
+    const closeMenuOnOutsideClick = (event: PointerEvent): void => {
+      if (!(event.target instanceof Element) || !event.target.closest(".chat-history-actions")) {
+        setOpenChatMenuId(undefined);
+      }
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setOpenChatMenuId(undefined);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeMenuOnOutsideClick);
+    document.addEventListener("keydown", closeMenuOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeMenuOnOutsideClick);
+      document.removeEventListener("keydown", closeMenuOnEscape);
+    };
+  }, [openChatMenuId]);
 
   useEffect(() => {
     setResourceNavigationTarget(undefined);
@@ -223,28 +253,50 @@ export function App(): ReactElement {
     setComposerSessionId(advanceComposerSessionId);
   }
 
+  function startRenamingChat(chat: ChatSummary): void {
+    setOpenChatMenuId(undefined);
+    setEditingChatId(chat.id);
+    setRenameDraft(chat.title);
+    setChatListStatus("");
+  }
+
+  function cancelRenamingChat(): void {
+    if (renamingChatId !== undefined) {
+      return;
+    }
+
+    setEditingChatId(undefined);
+    setRenameDraft("");
+  }
+
   async function handleRenameChat(chat: ChatSummary): Promise<void> {
-    if (isBusy) {
+    const title: string = renameDraft.trim();
+
+    if (isBusy || title === "") {
       return;
     }
 
-    const title: string | null = window.prompt(
-      UI_TEXT.renamePrompt,
-      chat.title,
-    );
-
-    if (title === null || title.trim() === "") {
+    if (title === chat.title) {
+      cancelRenamingChat();
       return;
     }
 
-    const renamedChat: ChatDetail = await renameChat(
-      chat.id,
-      title.trim(),
-    );
+    setRenamingChatId(chat.id);
+    setChatListStatus("");
 
-    setChatSummaries((summaries: ChatSummary[]) =>
-      sortedSummariesWith(renamedChat, summaries),
-    );
+    try {
+      const renamedChat: ChatDetail = await renameChat(chat.id, title);
+
+      setChatSummaries((summaries: ChatSummary[]) =>
+        sortedSummariesWith(renamedChat, summaries),
+      );
+      setEditingChatId(undefined);
+      setRenameDraft("");
+    } catch (error: unknown) {
+      setChatListStatus(getErrorMessage(error, UI_TEXT.unexpectedError));
+    } finally {
+      setRenamingChatId(undefined);
+    }
   }
 
   async function handleSubmit(
@@ -347,6 +399,7 @@ export function App(): ReactElement {
 
 
   function toggleChatHistory(): void {
+    setOpenChatMenuId(undefined);
     dispatchSidebarAction({ type: "toggleChatHistory" });
   }
 
@@ -407,55 +460,103 @@ export function App(): ReactElement {
                 }`}
                 key={chat.id}
               >
-                <button
-                  className="chat-history-open-button"
-                  type="button"
-                  disabled={isBusy && chat.id !== currentChatId}
-                  aria-current={chat.id === currentChatId ? "page" : undefined}
-                  onClick={() => {
-                    void openChat(chat.id);
-                  }}
-                >
-                  <span>{chat.title}</span>
-                  <small>{chat.date}</small>
-                </button>
-
-                <button
-                  className="chat-history-rename-button"
-                  type="button"
-                  disabled={isBusy}
-                  aria-label={UI_TEXT.renameChatButton}
-                  data-tooltip={UI_TEXT.renameChatButton}
-                  data-tooltip-placement="top"
-                  data-tooltip-align="end"
-                  onClick={() => {
-                    void handleRenameChat(chat);
-                  }}
-                >
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    focusable="false"
+                {editingChatId === chat.id ? (
+                  <form
+                    className="chat-history-rename-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleRenameChat(chat);
+                    }}
                   >
-                    <path d="m4 16.6-.7 4.1 4.1-.7L18.7 8.7l-3.4-3.4L4 16.6Zm13.2-12.7 3 3 .8-.8a2.1 2.1 0 0 0-3-3l-.8.8Z" />
-                  </svg>
-                </button>
-                <button
-                  className="chat-history-delete-button"
-                  type="button"
-                  disabled={isBusy}
-                  aria-label={UI_TEXT.deleteChatButton}
-                  data-tooltip={UI_TEXT.deleteChatButton}
-                  data-tooltip-placement="top"
-                  data-tooltip-align="end"
-                  onClick={() => {
-                    void handleDeleteChat(chat);
-                  }}
-                >
-                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
-                    <path d="M8 4h8l1 2h4v2H3V6h4l1-2Zm1 6h2v8H9v-8Zm4 0h2v8h-2v-8ZM6 10h2v8h8v-8h2v9a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-9Z" />
-                  </svg>
-                </button>
+                    <input
+                      autoFocus
+                      aria-label={UI_TEXT.renamePrompt}
+                      value={renameDraft}
+                      disabled={renamingChatId === chat.id}
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelRenamingChat();
+                        }
+                      }}
+                    />
+                    <div className="chat-history-rename-actions">
+                      <button
+                        type="submit"
+                        disabled={renamingChatId === chat.id || renameDraft.trim() === ""}
+                        aria-label={UI_TEXT.saveRenameAction}
+                        title={UI_TEXT.saveRenameAction}
+                      >
+                        <Check aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={renamingChatId === chat.id}
+                        aria-label={UI_TEXT.cancelRenameAction}
+                        title={UI_TEXT.cancelRenameAction}
+                        onClick={cancelRenamingChat}
+                      >
+                        <X aria-hidden="true" />
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      className="chat-history-open-button"
+                      type="button"
+                      disabled={isBusy && chat.id !== currentChatId}
+                      aria-current={chat.id === currentChatId ? "page" : undefined}
+                      onClick={() => {
+                        void openChat(chat.id);
+                      }}
+                    >
+                      <span>{chat.title}</span>
+                      <small>{chat.date}</small>
+                    </button>
+
+                    <div className="chat-history-actions">
+                      <button
+                        className="chat-history-menu-button"
+                        type="button"
+                        disabled={isBusy}
+                        aria-label={UI_TEXT.chatActionsButton}
+                        aria-haspopup="menu"
+                        aria-expanded={openChatMenuId === chat.id}
+                        onClick={() => {
+                          setOpenChatMenuId((openId: string | undefined) =>
+                            openId === chat.id ? undefined : chat.id,
+                          );
+                        }}
+                      >
+                        <MoreVertical aria-hidden="true" />
+                      </button>
+
+                      {openChatMenuId === chat.id ? (
+                        <div className="chat-history-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => startRenamingChat(chat)}
+                          >
+                            {UI_TEXT.renameChatAction}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenChatMenuId(undefined);
+                              void handleDeleteChat(chat);
+                            }}
+                          >
+                            {UI_TEXT.deleteChatAction}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </nav>
