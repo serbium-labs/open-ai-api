@@ -50,6 +50,27 @@ test("image attachments render an intrinsic-size-aware preview", () => {
   assert.match(markup, />landscape\.png<\/span>/);
 });
 
+test("generated image attachments render on assistant messages", () => {
+  const markup = renderToStaticMarkup(createElement(ChatTranscript, {
+    chatId: "edited-photo-chat",
+    messages: [{
+      id: "assistant-image",
+      role: "assistant",
+      content: "Here is the edited photo.",
+      status: "complete",
+      attachments: [{
+        name: "edited.png",
+        mimeType: "image/png",
+        path: "generated-edited.png",
+      }],
+    }],
+  }));
+
+  assert.match(markup, /chat-message-assistant/);
+  assert.match(markup, /class="message-attachment-image"/);
+  assert.match(markup, /src="\/api\/chats\/edited-photo-chat\/attachments\/generated-edited\.png"/);
+});
+
 test("a message renders every attached file", () => {
   const markup = renderToStaticMarkup(createElement(ChatTranscript, {
     chatId: "multi-chat",

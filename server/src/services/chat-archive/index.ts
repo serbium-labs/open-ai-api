@@ -35,10 +35,11 @@ type StoredMessageFile = {
 
 };
 
-type IncomingAttachment = {
+export type IncomingAttachment = {
   originalName: string;
   mimeType: string;
-  temporaryPath: string;
+  temporaryPath?: string;
+  data?: Buffer;
   durationSeconds?: number;
 };
 
@@ -617,8 +618,14 @@ public async getAttachmentPath(
         const storedFileName: string = `${randomUUID()}${extension}`;
         const storedPath: string = join(attachmentsDirectory, storedFileName);
 
-        /* Keep temporary files available while Codex processes the request. */
-        await copyFile(attachment.temporaryPath, storedPath);
+        if (attachment.data !== undefined) {
+          await writeFile(storedPath, attachment.data);
+        } else if (attachment.temporaryPath !== undefined) {
+          /* Keep temporary files available while Codex processes the request. */
+          await copyFile(attachment.temporaryPath, storedPath);
+        } else {
+          throw new Error("Attachment content is missing");
+        }
 
         message.attachments.push({
           name: attachment.originalName,

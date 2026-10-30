@@ -38,3 +38,27 @@ test("ChatArchiveService reports a missing chat without deleting existing chats"
     { id: existingChat.id, title: existingChat.title },
   ]);
 });
+
+test("ChatArchiveService stores generated attachment bytes on assistant messages", async (context: TestContext) => {
+  const { service } = await createArchive(context);
+  const chat = await service.createChat("Edited photo");
+  const imageBytes = Buffer.from("edited image bytes");
+
+  const updated = await service.appendMessage(chat.id, "assistant", "Done.", [{
+    originalName: "edited.png",
+    mimeType: "image/png",
+    data: imageBytes,
+  }]);
+  const attachment = updated.messages[0]?.attachments[0];
+
+  assert.equal(attachment?.name, "edited.png");
+  assert.equal(attachment?.mimeType, "image/png");
+  assert.deepEqual(
+    await readFile(await service.getAttachmentPath(chat.id, attachment?.path ?? "")),
+    imageBytes,
+  );
+  assert.deepEqual(
+    (await service.loadChat(chat.id)).messages[0]?.attachments,
+    updated.messages[0]?.attachments,
+  );
+});
