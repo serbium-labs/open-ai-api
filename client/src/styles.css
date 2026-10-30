@@ -172,7 +172,7 @@ textarea {
 .chat-history-item-locked {
   background: rgba(216, 216, 211, 0.28);
 }
-.chat-history-item:hover:not(.chat-history-item-locked) {
+.chat-history-item:hover:not(.chat-history-item-active):not(.chat-history-item-locked) {
   background: var(--color-surface-muted-hover);
 }
 .chat-history-item:has(> .chat-history-open-button:focus-visible) {
