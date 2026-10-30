@@ -6,12 +6,48 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   appendPromptTurn,
   ChatTranscript,
+  clearFailedMessages,
+  getDisplayErrorMessage,
   getResourceLoadStatus,
   isSmallImage,
   isSystemVoiceFilename,
   SMALL_IMAGE_MAX_DIMENSION_PX,
   type ChatMessageAttachment,
 } from "./index";
+
+test("HTML authentication errors are replaced with a helpful message", () => {
+  const error = new Error("<html><style>body{}</style><h1>403 Forbidden</h1></html>");
+
+  assert.equal(
+    getDisplayErrorMessage(error, "Unexpected error"),
+    "Authentication failed. Please check your Codex login.",
+  );
+});
+
+test("other HTML errors are replaced with a generic server message", () => {
+  assert.equal(
+    getDisplayErrorMessage(new Error("<STYLE>body{}</STYLE>Bad gateway"), "Unexpected error"),
+    "Server error. Please try again.",
+  );
+});
+
+test("plain-text errors remain unchanged", () => {
+  assert.equal(
+    getDisplayErrorMessage(new Error("Connection timed out"), "Unexpected error"),
+    "Connection timed out",
+  );
+});
+
+test("failed transcript messages can be cleared on chat change", () => {
+  const messages = appendPromptTurn([], "Hello").messages;
+  const failedMessages = messages.map((message) =>
+    message.status === "pending"
+      ? { ...message, content: "Failed", status: "error" as const }
+      : message,
+  );
+
+  assert.deepEqual(clearFailedMessages(failedMessages), [failedMessages[0]]);
+});
 
 test("small image detection only falls back when both dimensions are tiny", () => {
   assert.equal(SMALL_IMAGE_MAX_DIMENSION_PX, 96);

@@ -5,7 +5,9 @@ import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMe
 import {
   appendPromptTurn,
   ChatTranscript,
+  clearFailedMessages,
   failAssistantMessage,
+  getDisplayErrorMessage,
   type AppendPromptTurnResult,
   type ChatMessage,
   type ChatMessageAttachment,
@@ -229,6 +231,12 @@ export function App(): ReactElement {
       return;
     }
 
+    setSubmitError(null);
+    setConversationState((currentState: ConversationState) => ({
+      ...currentState,
+      messages: clearFailedMessages(currentState.messages),
+    }));
+
     const requestId: number = openChatRequestId.current;
     const nextConversation: ConversationState =
       await loadConversation(chatId, fetchChat);
@@ -249,6 +257,7 @@ export function App(): ReactElement {
 
     openChatRequestId.current += 1;
     setConversationState(createFreshConversationState());
+    setSubmitError(null);
     setPrompt("");
     setComposerSessionId(advanceComposerSessionId);
   }
@@ -353,7 +362,7 @@ export function App(): ReactElement {
       setPrompt("");
       return true;
     } catch (error: unknown) {
-      const message: string = getErrorMessage(error, UI_TEXT.unexpectedError);
+      const message: string = getDisplayErrorMessage(error, UI_TEXT.unexpectedError);
 
       setConversationState((currentState: ConversationState) => ({
         ...currentState,
