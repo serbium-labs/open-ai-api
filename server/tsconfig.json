@@ -13,6 +13,7 @@
       "#app": ["./src/app/index.ts"],
       "#config": ["./src/config/index.ts"],
       "#constants": ["./src/constants/index.ts"],
+      "#routes/auth": ["./src/routes/auth/index.ts"],
       "#routes/*": ["./src/routes/*/index.ts"],
       "#services/*": ["./src/services/*/index.ts"],
       "#models": ["./src/types/index.ts"]

@@ -8,6 +8,7 @@ services:
     env_file:
       - .env
     environment:
+      ACCESS_CODE: ${ACCESS_CODE:-UoYh5pykqTZ2Tbmw}
       CODEX_HOME: /home/node/.codex
       HOME: /home/node
       XDG_CACHE_HOME: /home/node/.codex/cache

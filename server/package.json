@@ -7,6 +7,7 @@
     "#app": "./dist/app/index.js",
     "#config": "./dist/config/index.js",
     "#constants": "./dist/constants/index.js",
+    "#routes/auth": "./dist/routes/auth/index.js",
     "#routes/*": "./dist/routes/*/index.js",
     "#services/*": "./dist/services/*/index.js",
     "#models": "./dist/types/index.js"

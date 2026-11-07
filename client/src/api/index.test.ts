@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { deleteChat, fetchChats, submitChatMessage } from "@api";
+import { checkAuthentication, deleteChat, fetchChats, logout, submitChatMessage, verifyAccessCode } from "@api";
 import {
   appendPromptTurn,
   ChatTranscript,
@@ -55,6 +55,27 @@ test("fetchChats returns an empty list for an empty successful response", async 
     new Response("", { status: 200 });
 
   assert.deepEqual(await fetchChats(fetchImpl), []);
+});
+
+test("auth API verifies the code and logs out with POST requests", async () => {
+  const requests: Array<{ input: string | URL | Request; init?: RequestInit }> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    requests.push({ input, init });
+    return String(input).endsWith("logout")
+      ? new Response(null, { status: 204 })
+      : new Response(JSON.stringify({ authenticated: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+  };
+
+  assert.equal(await checkAuthentication(fetchImpl), true);
+  await verifyAccessCode("secret", fetchImpl);
+  await logout(fetchImpl);
+
+  assert.equal(requests[0]?.input, "/api/auth/status");
+  assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), { code: "secret" });
+  assert.equal(requests[2]?.init?.method, "POST");
 });
 
 test("fetchChats returns an empty list for invalid JSON", async () => {
