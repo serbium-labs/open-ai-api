@@ -6,12 +6,15 @@ export const UTF8_ENCODING: BufferEncoding = "utf8";
 export const MARKDOWN_EXTENSION: string = ".md";
 export const CHAT_ARCHIVE_DIRECTORY_NAME: string = "chats";
 export const API_ROUTES = {
+  auth: "/api/auth",
   chats: "/api/chats",
 } as const;
 export const HTTP_STATUS = {
   ok: 200,
   noContent: 204,
   badRequest: 400,
+  unauthorized: 401,
+  forbidden: 403,
   payloadTooLarge: 413,
   notFound: 404,
   internalServerError: 500,

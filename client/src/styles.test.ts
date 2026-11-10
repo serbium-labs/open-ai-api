@@ -31,3 +31,12 @@ test("keeps comfortable spacing between chat history cards", async () => {
     /\.chat-history-item\s*{[^}]*padding: 8px 9px;/s,
   );
 });
+
+test("keeps the logout button stable with a muted hover background", async () => {
+  const stylesheet = await readFile(new URL("./styles.css", import.meta.url), "utf8");
+
+  assert.match(
+    stylesheet,
+    /\.logout-button:hover:not\(:disabled\),\s*\.logout-button:focus-visible\s*{[^}]*background: var\(--color-surface-muted-hover\);[^}]*transform: none;[^}]*box-shadow: none;/s,
+  );
+});

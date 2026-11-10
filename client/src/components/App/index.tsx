@@ -1,7 +1,18 @@
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
-import { Check, MoreVertical, X } from "lucide-react";
+import { Check, LogOut, MoreVertical, X } from "lucide-react";
 
-import { createChat, deleteChat, fetchChat, fetchChats, renameChat, submitChatMessage } from "@api";
+import {
+  checkAuthentication,
+  createChat,
+  deleteChat,
+  fetchChat,
+  fetchChats,
+  logout,
+  renameChat,
+  submitChatMessage,
+  UNAUTHORIZED_EVENT,
+  verifyAccessCode,
+} from "@api";
 import {
   appendPromptTurn,
   ChatTranscript,
@@ -74,6 +85,10 @@ function getLocalStorage(): Storage | undefined {
 }
 
 export function App(): ReactElement {
+  const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  const [accessCode, setAccessCode] = useState<string>("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isVerifyingCode, setIsVerifyingCode] = useState<boolean>(false);
   const optimisticAttachmentUrlsRef = useRef<Set<string>>(new Set());
   const [composerSessionId, setComposerSessionId] = useState<number>(0);
   const [prompt, setPrompt] = useState<string>("");
@@ -114,6 +129,30 @@ export function App(): ReactElement {
   const resourceNavigationRequestId = useRef<number>(0);
   const openChatRequestId = useRef<number>(0);
   const isBusy: boolean = isRunning || deletingChatId !== undefined || renamingChatId !== undefined;
+
+  useEffect(() => {
+    let isMounted = true;
+    const handleUnauthorized = (): void => setAuthStatus("unauthenticated");
+
+    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+    void checkAuthentication()
+      .then((authenticated: boolean) => {
+        if (isMounted) {
+          setAuthStatus(authenticated ? "authenticated" : "unauthenticated");
+        }
+      })
+      .catch((error: unknown) => {
+        if (isMounted) {
+          setAuthError(getErrorMessage(error, UI_TEXT.unexpectedError));
+          setAuthStatus("unauthenticated");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
+  }, []);
 
   useEffect(() => {
     const mobileMediaQuery: MediaQueryList = window.matchMedia(MOBILE_MEDIA_QUERY);
@@ -163,6 +202,10 @@ export function App(): ReactElement {
   }, [currentChatId]);
 
   useEffect(() => {
+    if (authStatus !== "authenticated") {
+      return;
+    }
+
     let isMounted: boolean = true;
 
     async function loadInitialChats(): Promise<void> {
@@ -188,7 +231,7 @@ export function App(): ReactElement {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authStatus]);
 
   useEffect(() => {
     const activeUrls = new Set(
@@ -423,6 +466,60 @@ export function App(): ReactElement {
     );
   }
 
+  async function handleVerifyCode(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setIsVerifyingCode(true);
+    setAuthError(null);
+
+    try {
+      await verifyAccessCode(accessCode);
+      window.location.reload();
+    } catch (error: unknown) {
+      setAuthError(getErrorMessage(error, "Invalid access code"));
+      setIsVerifyingCode(false);
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    try {
+      await logout();
+    } finally {
+      setAuthStatus("unauthenticated");
+      setAccessCode("");
+      setChatSummaries([]);
+      setConversationState(createFreshConversationState());
+    }
+  }
+
+  if (authStatus !== "authenticated") {
+    return (
+      <main className="access-gate">
+        <form className="access-gate-card" onSubmit={handleVerifyCode}>
+          <p className="access-gate-eyebrow">Early Access</p>
+          <h1>Enter access code</h1>
+          <p>This application is available to invited users only.</p>
+          <label htmlFor="access-code">Access code</label>
+          <input
+            id="access-code"
+            type="password"
+            autoComplete="current-password"
+            autoFocus={authStatus === "unauthenticated"}
+            value={accessCode}
+            disabled={authStatus === "checking" || isVerifyingCode}
+            onChange={(event) => setAccessCode(event.target.value)}
+          />
+          {authError ? <p className="access-gate-error" role="alert">{authError}</p> : null}
+          <button
+            type="submit"
+            disabled={authStatus === "checking" || isVerifyingCode || accessCode.trim() === ""}
+          >
+            {authStatus === "checking" ? "Checking…" : isVerifyingCode ? "Entering…" : "Continue"}
+          </button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <>
       {isChatHistoryOpen ? (
@@ -569,6 +666,15 @@ export function App(): ReactElement {
               </div>
             ))}
           </nav>
+
+          <button
+            className="logout-button"
+            type="button"
+            onClick={() => void handleLogout()}
+          >
+            <LogOut aria-hidden="true" />
+            <span>Log out</span>
+          </button>
         </aside>
       ) : null}
 

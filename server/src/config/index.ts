@@ -11,6 +11,7 @@ import {
 } from "#constants";
 
 export type ServerConfig = {
+  accessCode: string;
   port: number;
   repositoryRoot: string;
   chatArchiveDirectory: string;
@@ -37,7 +38,7 @@ const DEFAULT_RUNTIME_PLATFORM: RuntimePlatform = {
   platform: process.platform,
 };
 
-const REQUIRED_ENVIRONMENT_VARIABLES = ["WHISPER_MODEL_PATH"] as const;
+const REQUIRED_ENVIRONMENT_VARIABLES = ["ACCESS_CODE", "WHISPER_MODEL_PATH"] as const;
 
 export function getRepositoryRoot(): string {
   return resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -179,6 +180,7 @@ export function createServerConfig(
     : environment.PORT;
 
   return {
+    accessCode: environment.ACCESS_CODE?.trim() || "",
     port: readPort(serverPortName, serverPortValue, DEFAULT_SERVER_PORT),
     repositoryRoot,
     chatArchiveDirectory: join(repositoryRoot, CHAT_ARCHIVE_DIRECTORY_NAME),

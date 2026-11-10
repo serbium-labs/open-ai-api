@@ -3,6 +3,7 @@ import express, { type Express } from "express";
 import { API_ROUTES } from "#constants";
 import { createServerConfig, type ServerConfig } from "#config";
 import { createChatsRouter } from "#routes/chats";
+import { createAuthRouter, createRequireAuthentication } from "#routes/auth";
 import {
   AudioTranscriptionService,
   type AudioTranscriber,
@@ -43,6 +44,10 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const app: Express = express();
 
   app.use(express.json());
+  const authRouter = createAuthRouter(config.accessCode);
+
+  app.use("/api", createRequireAuthentication(config.accessCode));
+  app.use(API_ROUTES.auth, authRouter);
   app.use(
     API_ROUTES.chats,
     createChatsRouter(

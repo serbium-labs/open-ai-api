@@ -22,7 +22,7 @@ test("root .env loads without overriding existing environment values", async () 
   try {
     await writeFile(
       join(directory, ".env"),
-      "SERVER_PORT=4200\nWHISPER_LANGUAGE=ru\nWHISPER_MODEL_PATH=models/ggml-base.bin\n",
+      "SERVER_PORT=4200\nACCESS_CODE=test-code\nWHISPER_LANGUAGE=ru\nWHISPER_MODEL_PATH=models/ggml-base.bin\n",
     );
     loadRootEnvironment(directory, environment);
     assert.equal(environment.SERVER_PORT, "4100");
@@ -36,13 +36,16 @@ test("root .env reports missing and empty required variables", async () => {
   const directory = await mkdtemp(join(tmpdir(), "incomplete-root-env-test-"));
 
   try {
-    for (const contents of ["", "WHISPER_MODEL_PATH=   \n"]) {
+    for (const { contents, missing } of [
+      { contents: "", missing: "ACCESS_CODE, WHISPER_MODEL_PATH" },
+      { contents: "ACCESS_CODE=test-code\nWHISPER_MODEL_PATH=   \n", missing: "WHISPER_MODEL_PATH" },
+    ]) {
       await writeFile(join(directory, ".env"), contents);
 
       assert.throws(
         () => loadRootEnvironment(directory, {}),
         new Error(
-          "Missing required environment variables in .env: WHISPER_MODEL_PATH. " +
+          `Missing required environment variables in .env: ${missing}. ` +
             "Please check .env.example.",
         ),
       );

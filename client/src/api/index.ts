@@ -7,11 +7,19 @@ import type {
 import type { ChatDetail, ChatSummary } from "@models";
 
 export type XMLHttpRequestFactory = () => XMLHttpRequest;
+export const UNAUTHORIZED_EVENT = "app:unauthorized";
+
+function notifyUnauthorized(response: Response): void {
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  }
+}
 
 async function readJsonResponse<TSuccess extends object>(
   response: Response,
   fallback?: TSuccess,
 ): Promise<TSuccess> {
+  notifyUnauthorized(response);
   const responseText: string = await response.text();
   let body: unknown;
 
@@ -44,6 +52,41 @@ async function readJsonResponse<TSuccess extends object>(
   }
 
   return body as TSuccess;
+}
+
+export async function checkAuthentication(
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const response = await fetchImpl("/api/auth/status");
+
+  if (response.status === 401) {
+    notifyUnauthorized(response);
+    return false;
+  }
+
+  await readJsonResponse<{ authenticated: boolean }>(response);
+  return true;
+}
+
+export async function verifyAccessCode(
+  code: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const response = await fetchImpl("/api/auth/verify-code", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+
+  await readJsonResponse<{ authenticated: boolean }>(response);
+}
+
+export async function logout(fetchImpl: typeof fetch = fetch): Promise<void> {
+  const response = await fetchImpl("/api/auth/logout", { method: "POST" });
+
+  if (!response.ok) {
+    await readJsonResponse<Record<string, never>>(response);
+  }
 }
 
 export async function fetchChats(
