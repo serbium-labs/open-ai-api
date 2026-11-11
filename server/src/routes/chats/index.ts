@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 
@@ -52,7 +52,10 @@ function errorMessage(error: unknown): string {
 }
 
 const ATTACHMENT_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
   ".m4a": "audio/mp4",
+  ".mp3": "audio/mpeg",
   ".mp4": "audio/mp4",
   ".oga": "audio/ogg",
   ".ogg": "audio/ogg",
@@ -62,6 +65,57 @@ const ATTACHMENT_MIME_TYPES: Readonly<Record<string, string>> = {
 
 export function getAttachmentMimeType(path: string): string | undefined {
   return ATTACHMENT_MIME_TYPES[extname(path).toLowerCase()];
+}
+
+export async function detectAttachmentMimeType(
+  path: string,
+  declaredMimeType?: string,
+  originalName?: string,
+): Promise<string | undefined> {
+  const file = await open(path, "r");
+
+  try {
+    const header = Buffer.alloc(16);
+    const { bytesRead } = await file.read(header, 0, header.length, 0);
+    const bytes = header.subarray(0, bytesRead);
+
+    if (bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+      return "audio/webm";
+    }
+    if (bytes.subarray(0, 4).toString("ascii") === "OggS") {
+      return "audio/ogg";
+    }
+    if (
+      bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
+      bytes.subarray(8, 12).toString("ascii") === "WAVE"
+    ) {
+      return "audio/wav";
+    }
+    if (bytes.subarray(4, 8).toString("ascii") === "ftyp") {
+      return "audio/mp4";
+    }
+    if (bytes.subarray(0, 4).toString("ascii") === "fLaC") {
+      return "audio/flac";
+    }
+    if (
+      bytes.subarray(0, 3).toString("ascii") === "ID3" ||
+      (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+    ) {
+      return "audio/mpeg";
+    }
+  } finally {
+    await file.close();
+  }
+
+  return (
+    getAttachmentMimeType(path) ??
+    (originalName === undefined
+      ? undefined
+      : getAttachmentMimeType(originalName)) ??
+    (declaredMimeType?.startsWith("audio/") === true
+      ? declaredMimeType
+      : undefined)
+  );
 }
 
 type ProcessChatMessageOptions = {
@@ -267,18 +321,31 @@ export function createChatsRouter(
       response: Response,
     ) => {
       try {
+        const chat = await chatArchiveService.loadChat(
+          request.params.chatId,
+        );
+        const requestedName: string = request.params.attachmentName;
+        const attachment = chat.messages
+          .flatMap((message) => message.attachments)
+          .find((candidate) => candidate.path === requestedName);
         const attachmentPath =
           await chatArchiveService.getAttachmentPath(
             request.params.chatId,
-            request.params.attachmentName,
+            requestedName,
           );
 
         const mimeType: string | undefined =
-          getAttachmentMimeType(attachmentPath);
+          await detectAttachmentMimeType(
+            attachmentPath,
+            attachment?.mimeType,
+            attachment?.name,
+          );
 
         if (mimeType !== undefined) {
           response.type(mimeType);
         }
+
+        response.set("Cache-Control", "private, no-cache");
 
         response.sendFile(attachmentPath);
       } catch (error: unknown) {

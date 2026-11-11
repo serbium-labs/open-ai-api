@@ -6,6 +6,7 @@ import test, { type TestContext } from "node:test";
 
 import {
   createChatsRouter,
+  detectAttachmentMimeType,
   getAttachmentMimeType,
   processChatMessage,
 } from "./index";
@@ -27,7 +28,22 @@ test("attachment audio MIME types are explicit and case-insensitive", () => {
   assert.equal(getAttachmentMimeType("voice.mp4"), "audio/mp4");
   assert.equal(getAttachmentMimeType("voice.m4a"), "audio/mp4");
   assert.equal(getAttachmentMimeType("voice.wav"), "audio/wav");
+  assert.equal(getAttachmentMimeType("voice.mp3"), "audio/mpeg");
+  assert.equal(getAttachmentMimeType("voice.flac"), "audio/flac");
   assert.equal(getAttachmentMimeType("notes.txt"), undefined);
+});
+
+test("old audio MIME types are detected from file bytes without a useful extension", async (context: TestContext) => {
+  const directory = await mkdtemp(join(tmpdir(), "old-audio-mime-test-"));
+  context.after(async () => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "legacy-attachment");
+
+  await writeFile(path, Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0]));
+
+  assert.equal(
+    await detectAttachmentMimeType(path, "application/octet-stream"),
+    "audio/webm",
+  );
 });
 
 type FakeCodex = {

@@ -8,6 +8,8 @@ import {
   ChatTranscript,
   clearFailedMessages,
   getDisplayErrorMessage,
+  getAttachmentUrl,
+  getAudioMimeType,
   getResourceLoadStatus,
   isSmallImage,
   isSystemVoiceFilename,
@@ -279,6 +281,38 @@ test("sent uploaded audio uses the shared waveform player", () => {
   assert.match(markup, />meeting-recording\.mp3<\/span>/);
   assert.doesNotMatch(markup, / controls=""/);
   assert.doesNotMatch(markup, /type="range"/);
+});
+
+test("persisted audio always uses its stable API URL instead of a stale blob URL", () => {
+  const attachment: ChatMessageAttachment = {
+    name: "voice-message.webm",
+    mimeType: "application/octet-stream",
+    path: "attachments/old voice.webm",
+    previewUrl: "blob:expired-session-preview",
+  };
+
+  assert.equal(
+    getAttachmentUrl(attachment, "chat/old"),
+    "/api/chats/chat%2Fold/attachments/attachments%2Fold%20voice.webm",
+  );
+  assert.equal(getAudioMimeType(attachment), "audio/webm");
+
+  const markup: string = renderToStaticMarkup(
+    createElement(ChatTranscript, {
+      chatId: "chat/old",
+      messages: [{
+        id: "old-message",
+        role: "user",
+        content: "",
+        status: "complete",
+        attachments: [attachment],
+      }],
+    }),
+  );
+
+  assert.match(markup, /src="\/api\/chats\/chat%2Fold\/attachments\/attachments%2Fold%20voice\.webm"/);
+  assert.match(markup, /type="audio\/webm"/);
+  assert.doesNotMatch(markup, /blob:expired-session-preview/);
 });
 
 test("persisted voice audio restores the waveform player without its generated filename", () => {

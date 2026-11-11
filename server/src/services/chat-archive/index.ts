@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, normalize, posix, relative, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, posix, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { MARKDOWN_EXTENSION, UTF8_ENCODING } from "#constants";
@@ -534,12 +534,14 @@ public async getAttachmentPath(
     throw new Error("Chat not found");
   }
 
+  const normalizedAttachmentName: string = basename(
+    attachmentName.replace(/\\/g, "/"),
+  );
+
   if (
     attachmentName.trim() === "" ||
-    attachmentName.includes("/") ||
-    attachmentName.includes("\\") ||
-    attachmentName === "." ||
-    attachmentName === ".."
+    normalizedAttachmentName === "." ||
+    normalizedAttachmentName === ".."
   ) {
     throw new Error("Attachment not found");
   }
@@ -558,7 +560,7 @@ public async getAttachmentPath(
     attachmentExists = entries.some(
       (entry) =>
         entry.isFile() &&
-        entry.name === attachmentName,
+        entry.name === normalizedAttachmentName,
     );
   } catch {
     attachmentExists = false;
@@ -570,7 +572,7 @@ public async getAttachmentPath(
 
   return join(
     attachmentsDirectory,
-    attachmentName,
+    normalizedAttachmentName,
   );
 }
 

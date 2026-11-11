@@ -560,11 +560,54 @@ function renderSegment(segment: MessageSegment, index: number): ReactNode {
 
 }
 
-function attachmentUrl(
+export function attachmentUrl(
   chatId: string,
   attachmentPath: string,
 ): string {
   return `/api/chats/${encodeURIComponent(chatId)}/attachments/${encodeURIComponent(attachmentPath)}`;
+}
+
+const AUDIO_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+  aac: "audio/aac",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  mp4: "audio/mp4",
+  oga: "audio/ogg",
+  ogg: "audio/ogg",
+  wav: "audio/wav",
+  webm: "audio/webm",
+};
+
+export function getAudioMimeType(
+  attachment: ChatMessageAttachment,
+): string {
+  for (const value of [attachment.path, attachment.name]) {
+    const extension: string | undefined = value
+      .toLowerCase()
+      .match(/\.([a-z0-9]+)$/)?.[1];
+    const mimeType: string | undefined =
+      extension === undefined
+        ? undefined
+        : AUDIO_MIME_TYPES_BY_EXTENSION[extension];
+
+    if (mimeType !== undefined) {
+      return mimeType;
+    }
+  }
+
+  return attachment.mimeType;
+}
+
+export function getAttachmentUrl(
+  attachment: ChatMessageAttachment,
+  chatId: string | undefined,
+): string | undefined {
+  if (chatId !== undefined && attachment.path.trim() !== "") {
+    return attachmentUrl(chatId, attachment.path);
+  }
+
+  return attachment.previewUrl;
 }
 
 function attachmentIcon(attachment: ChatAttachment): string {
@@ -696,12 +739,13 @@ function renderAttachment(
   chatId: string | undefined,
   key: string,
 ): ReactNode {
-  if (attachment.mimeType.startsWith("audio/")) {
-    const audioUrl: string | undefined =
-      attachment.previewUrl ??
-      (chatId === undefined
-        ? undefined
-        : attachmentUrl(chatId, attachment.path));
+  const audioMimeType: string = getAudioMimeType(attachment);
+
+  if (audioMimeType.startsWith("audio/")) {
+    const audioUrl: string | undefined = getAttachmentUrl(
+      attachment,
+      chatId,
+    );
 
     return (
       <div
@@ -715,7 +759,7 @@ function renderAttachment(
         ) : (
           <AudioPlayer
             src={audioUrl}
-            mimeType={attachment.mimeType}
+            mimeType={audioMimeType}
             label={attachment.name}
             durationSeconds={attachment.durationSeconds}
           />
